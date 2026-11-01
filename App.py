@@ -374,4 +374,4 @@ elif selected_key == "production":
         for i in range(num_materials):
             c1, c2 = st.columns(2)
             with c1:
-                mat = st.
+               mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
