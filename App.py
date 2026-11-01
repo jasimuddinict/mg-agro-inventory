@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# নিরাপদ সিএসএস (আইকন নষ্ট না করে পরিষ্কার ফন্ট ও বাটন)
 st.markdown("""
 <style>
     .stMetric {
@@ -36,7 +35,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- লগইন ভেরিফিকেশন সিস্টেম -----------------
+# লগইন ভেরিফিকেশন সিস্টেম
 USERS = {
     "admin": "mg1234",
     "manager": "agro2026"
@@ -70,7 +69,7 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-# ----------------- মূল সফটওয়্যার (লগইন হওয়ার পর) -----------------
+# মূল সফটওয়্যার
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -293,7 +292,6 @@ if selected_key == "dashboard":
 elif selected_key == "raw_purchase":
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
-    # ওভাররাইট মুক্ত চেকবক্স সিস্টেম
     if st.checkbox("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে টিক দিন"):
         new_item_to_add = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
         if st.button("তালিকায় যুক্ত করুন"):
@@ -316,4 +314,64 @@ elif selected_key == "raw_purchase":
     with st.form("raw_purchase_form", clear_on_submit=True):
         entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
         item_name = st.selectbox("কাঁচামাল নির্বাচন করুন", db_items)
-        unit = st.selectbox("পরিমাপ
+        unit = st.selectbox("পরিমাপের একক", ["Kg", "Ltr", "Gram", "MG"])
+        qty = st.number_input("পরিমাণ (Quantity)", min_value=0.0, step=0.1)
+        cost_unit = st.number_input("প্রতি এককের দর (Rate/Unit)", min_value=0.0, step=1.0)
+        
+        submitted = st.form_submit_button("স্টকে যোগ করুন")
+        if submitted and qty > 0:
+            total = qty * cost_unit
+            cursor.execute("INSERT INTO raw_materials (date, item_name, unit, quantity, cost_per_unit, total_cost) VALUES (?, ?, ?, ?, ?, ?)",
+                           (str(entry_date), item_name, unit, qty, cost_unit, total))
+            conn.commit()
+            st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
+
+# ----------------- ৩. বোতল/প্যাকেট ক্রয় -----------------
+elif selected_key == "packaging_purchase":
+    st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
+    with st.form("pack_form", clear_on_submit=True):
+        entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
+        bottle_size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg", "অন্যান্য"])
+        qty = st.number_input("বোতলের সংখ্যা (পিস)", min_value=0, step=1)
+        price_unit = st.number_input("প্রতি পিস বোতলের দাম", min_value=0.0, step=0.1)
+        
+        submitted = st.form_submit_button("বোতল স্টকে যোগ করুন")
+        if submitted and qty > 0:
+            total = qty * price_unit
+            cursor.execute("INSERT INTO packaging (date, bottle_size, quantity, unit_price, total_cost) VALUES (?, ?, ?, ?, ?)",
+                           (str(entry_date), bottle_size, qty, price_unit, total))
+            conn.commit()
+            st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
+
+# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি -----------------
+elif selected_key == "production":
+    st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
+    st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
+    
+    product_list = [
+        "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
+        "MG -Enzyme", "MG -AD3E", "MG -ZINC VET", "MG -Multi plus", "MG -COF NIL", 
+        "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
+    ]
+    
+    raw_materials_available = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
+    
+    num_materials = st.number_input("এই ব্যাচে মোট কয়টি কাঁচামাল ব্যবহার হয়েছে?", min_value=1, max_value=20, value=2, step=1)
+    
+    with st.form("prod_multi_form", clear_on_submit=True):
+        entry_date = st.date_input("উৎপাদনের তারিখ", date.today())
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            product_name = st.selectbox("ওষুধের নাম", product_list)
+        with col_p2:
+            size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
+        with col_p3:
+            bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
+        
+        st.markdown("##### 🧪 ব্যবহৃত কাঁচামাল ও পরিমাণের তালিকা:")
+        
+        used_materials_data = []
+        for i in range(num_materials):
+            c1, c2 = st.columns(2)
+            with c1:
+                mat = st.
