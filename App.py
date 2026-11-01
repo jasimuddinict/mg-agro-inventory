@@ -198,7 +198,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     else:
         st.info("এখনো কোনো উৎপাদন রেকর্ড নেই।")
 
-    # কাঁচামালের বর্তমান স্টক (একাধিক কাঁচামাল বিয়োগের পর)
+    # কাঁচামালের বর্তমান স্টক
     st.subheader("🧪 কাঁচামালের বর্তমান মজুদ (Raw Material Stock)")
     if not df_raw.empty:
         raw_in = df_raw.groupby(["item_name", "unit"])["quantity"].sum().reset_index()
@@ -233,6 +233,47 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
         st.dataframe(pack_stock[["বোতল/প্যাকেট সাইজ", "মোট ক্রয় (পিস)", "উৎপাদনে ব্যবহৃত (পিস)", "অবশিষ্ট স্টক (পিস)"]], use_container_width=True)
     else:
         st.info("এখনো কোনো বোতল/প্যাকেট ক্রয় এন্ট্রি নেই।")
+
+    # সেলসম্যান ও কাস্টমারভিত্তিক হিসাব
+    st.markdown("---")
+    st.subheader("👥 সেলসম্যান ও কাস্টমারভিত্তিক বিক্রয় ও বাকির হিসাব")
+    
+    if not df_sales.empty:
+        sm_summary = df_sales.groupby("salesman_id").agg({
+            "total_bill": "sum",
+            "cash_received": "sum",
+            "due_amount": "sum"
+        }).reset_index()
+        
+        sm_summary.rename(columns={
+            "salesman_id": "সেলসম্যান আইডি",
+            "total_bill": "মোট বিক্রি (৳)",
+            "cash_received": "নগদ আদায় (৳)",
+            "due_amount": "মোট বাকি (৳)"
+        }, inplace=True)
+        
+        st.write("📌 **সকল সেলসম্যানের সারসংক্ষেপ (Summary):**")
+        st.dataframe(sm_summary, use_container_width=True)
+        
+        st.write("🔍 **নির্দিষ্ট সেলসম্যান অনুযায়ী কাস্টমার খতিয়ান:**")
+        selected_sm = st.selectbox("কোন সেলসম্যানের কাস্টমার লিস্ট দেখতে চান?", sm_summary["সেলসম্যান আইডি"].unique())
+        
+        cust_df = df_sales[df_sales["salesman_id"] == selected_sm].groupby(["customer_name"]).agg({
+            "total_bill": "sum",
+            "cash_received": "sum",
+            "due_amount": "sum"
+        }).reset_index()
+        
+        cust_df.rename(columns={
+            "customer_name": "কাস্টমার / ডিলারের নাম",
+            "total_bill": "মোট ক্রয় বিল (৳)",
+            "cash_received": "পরিশোধিত টাকা (৳)",
+            "due_amount": "বাকি টাকা (৳)"
+        }, inplace=True)
+        
+        st.dataframe(cust_df, use_container_width=True)
+    else:
+        st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
 # ----------------- ২. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu == "🧪 কাঁচামাল ক্রয় এন্ট্রি":
@@ -289,7 +330,7 @@ elif menu == "🧴 বোতল/প্যাকেট ক্রয়":
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি (একাধিক কাঁচামাল সাপোর্ট) -----------------
+# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি (মাল্টি-কাঁচামাল সাপোর্ট) -----------------
 elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -302,7 +343,6 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     
     raw_materials_available = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
     
-    # ফর্মের বাইরে কাঁচামালের সংখ্যা নির্ধারণের অপশন
     num_materials = st.number_input("এই ব্যাচে মোট কয়টি কাঁচামাল ব্যবহার হয়েছে?", min_value=1, max_value=20, value=2, step=1)
     
     with st.form("prod_multi_form", clear_on_submit=True):
@@ -317,7 +357,6 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
         
         st.markdown("##### 🧪 ব্যবহৃত কাঁচামাল ও পরিমাণের তালিকা:")
         
-        # ডায়নামিক রো তৈরি
         used_materials_data = []
         for i in range(num_materials):
             c1, c2 = st.columns(2)
@@ -329,14 +368,12 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
         
         submitted = st.form_submit_button("উৎপাদন সম্পন্ন করুন")
         if submitted:
-            # প্রোডাকশন টেবিল ইনসার্ট
             cursor.execute("""
             INSERT INTO production (date, product_name, size, bottles_produced)
             VALUES (?, ?, ?, ?)
             """, (str(entry_date), product_name, size, bottles_produced))
             prod_id = cursor.lastrowid
             
-            # প্রতিটি ব্যবহৃত কাঁচামাল ডাটাবেসে সেভ
             for mat_name, mat_qty in used_materials_data:
                 if mat_qty > 0:
                     cursor.execute("""
