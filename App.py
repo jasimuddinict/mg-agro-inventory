@@ -134,7 +134,7 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-# নিরাপদ মেনু ডিকশনারি (ইউনিকোড সমস্যা মুক্ত)
+# মেনু তালিকা
 menu_options = {
     "dashboard": "📊 লাইভ ড্যাশবোর্ড",
     "raw_purchase": "🧪 কাঁচামাল ক্রয় এন্ট্রি",
@@ -145,7 +145,6 @@ menu_options = {
     "records": "🗑️ রেকর্ড সংশোধন ও ডিলিট"
 }
 
-# সাইডবার মেনু
 selected_key = st.sidebar.radio(
     "মেন্যু নির্বাচন করুন:",
     options=list(menu_options.keys()),
@@ -163,4 +162,48 @@ if selected_key == "dashboard":
     df_sales = pd.read_sql("SELECT * FROM sales", conn)
     df_due_col = pd.read_sql("SELECT * FROM due_collections", conn)
     
-    col1, col2, col
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_raw_cost = df_raw["total_cost"].sum() if not df_raw.empty else 0.0
+    total_pack_cost = df_pack["total_cost"].sum() if not df_pack.empty else 0.0
+    total_sales = df_sales["total_bill"].sum() if not df_sales.empty else 0.0
+    
+    initial_due = df_sales["due_amount"].sum() if not df_sales.empty else 0.0
+    total_collected = df_due_col["collected_amount"].sum() if not df_due_col.empty else 0.0
+    current_net_due = initial_due - total_collected
+    
+    col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
+    col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
+    col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
+    col4.metric("মার্কেটে বর্তমান আসল বাকি (Due)", f"৳ {current_net_due:,.2f}")
+    
+    st.markdown("---")
+    
+    # এক্সেল ডাউনলোড বাটন
+    try:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
+            df_pack.to_excel(writer, sheet_name='Packaging', index=False)
+            df_prod.to_excel(writer, sheet_name='Production', index=False)
+            df_used.to_excel(writer, sheet_name='Used Materials', index=False)
+            df_sales.to_excel(writer, sheet_name='Sales', index=False)
+            df_due_col.to_excel(writer, sheet_name='Due Collections', index=False)
+        processed_data = output.getvalue()
+        
+        st.download_button(
+            label="📥 সম্পূর্ণ ইনভেন্টরি ও কালেকশন রিপোর্ট ডাউনলোড করুন (Excel)",
+            data=processed_data,
+            file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception:
+        pass
+
+    st.markdown("---")
+    
+    # তৈরি পণ্যের বর্তমান স্টক
+    st.subheader("📦 তৈরি ওষুধের বর্তমান মজুদ (Finished Goods Stock)")
+    if not df_prod.empty:
+        prod_summary = df_prod.groupby(["product_name", "size"])["bottles_produced"].sum().reset_index()
+        if not df_sales.empty:
