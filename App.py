@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# বাংলা ফন্ট ও স্টাইল
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -46,7 +45,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- লগইন সিস্টেম -----------------
 USERS = {
     "admin": "mg1234",
     "manager": "agro2026"
@@ -80,7 +78,6 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-# ----------------- মূল সফটওয়্যার -----------------
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -110,7 +107,6 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-# মেন্যু তালিকা (ইনডেক্স ভিত্তিক নির্ভরযোগ্য রাউটিং)
 menu_list = [
     "📊 লাইভ ড্যাশবোর্ড", 
     "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
@@ -124,7 +120,6 @@ menu_list = [
 selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
 menu_index = menu_list.index(selected_menu)
 
-# ----------------- ০. লাইভ ড্যাশবোর্ড -----------------
 if menu_index == 0:
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
@@ -288,13 +283,198 @@ if menu_index == 0:
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
-# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu_index == 1:
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
     if st.checkbox("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে টিক দিন"):
         new_item_to_add = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
         if st.button("তালিকায় যুক্ত করুন"):
-            if new_item_to_add.strip() != "":
-                try:
-                    cursor.execute("INSERT INTO item_list (name) VALUES (?)", (new_item_to_add.strip(),))
+            val_to_add = new_item_to_add.strip()
+            if val_to_add:
+                cursor.execute("INSERT OR IGNORE INTO item_list (name) VALUES (?)", (val_to_add,))
+                conn.commit()
+                st.success(f"'{val_to_add}' তালিকায় নিশ্চিত করা হয়েছে!")
+                st.rerun()
+            else:
+                st.error("দয়া করে কাঁচামালের নাম লিখুন।")
+
+    st.markdown("---")
+    st.subheader("ক্রয় ভাউচার এন্ট্রি")
+    
+    db_items = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
+
+    with st.form("raw_purchase_form", clear_on_submit=True):
+        entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
+        item_name = st.selectbox("কাঁচামাল নির্বাচন করুন", db_items)
+        unit = st.selectbox("পরিমাপের একক", ["Kg", "Ltr", "Gram", "MG"])
+        qty = st.number_input("পরিমাণ (Quantity)", min_value=0.0, step=0.1)
+        cost_unit = st.number_input("প্রতি এককের দর (Rate/Unit)", min_value=0.0, step=1.0)
+        
+        submitted = st.form_submit_button("স্টকে যোগ করুন")
+        if submitted and qty > 0:
+            total = qty * cost_unit
+            cursor.execute("INSERT INTO raw_materials (date, item_name, unit, quantity, cost_per_unit, total_cost) VALUES (?, ?, ?, ?, ?, ?)",
+                           (str(entry_date), item_name, unit, qty, cost_unit, total))
+            conn.commit()
+            st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
+
+elif menu_index == 2:
+    st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
+    with st.form("pack_form", clear_on_submit=True):
+        entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
+        bottle_size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg", "অন্যান্য"])
+        qty = st.number_input("বোতলের সংখ্যা (পিস)", min_value=0, step=1)
+        price_unit = st.number_input("প্রতি পিস বোতলের দাম", min_value=0.0, step=0.1)
+        
+        submitted = st.form_submit_button("বোতল স্টকে যোগ করুন")
+        if submitted and qty > 0:
+            total = qty * price_unit
+            cursor.execute("INSERT INTO packaging (date, bottle_size, quantity, unit_price, total_cost) VALUES (?, ?, ?, ?, ?)",
+                           (str(entry_date), bottle_size, qty, price_unit, total))
+            conn.commit()
+            st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
+
+elif menu_index == 3:
+    st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
+    st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
+    
+    product_list = [
+        "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
+        "MG -Enzyme", "MG -AD3E", "MG -ZINC VET", "MG -Multi plus", "MG -COF NIL", 
+        "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
+    ]
+    
+    raw_materials_available = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
+    
+    num_materials = st.number_input("এই ব্যাচে মোট কয়টি কাঁচামাল ব্যবহার হয়েছে?", min_value=1, max_value=20, value=2, step=1)
+    
+    with st.form("prod_multi_form", clear_on_submit=True):
+        entry_date = st.date_input("উৎপাদনের তারিখ", date.today())
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            product_name = st.selectbox("ওষুধের নাম", product_list)
+        with col_p2:
+            size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
+        with col_p3:
+            bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
+        
+        st.markdown("##### 🧪 ব্যবহৃত কাঁচামাল ও পরিমাণের তালিকা:")
+        
+        used_materials_data = []
+        for i in range(num_materials):
+            c1, c2 = st.columns(2)
+            with c1:
+                mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
+            with c2:
+                q = st.number_input(f"পরিমাণ (Kg/Ltr) #{i+1}", min_value=0.0, step=0.01, key=f"qty_{i}")
+            used_materials_data.append((mat, q))
+        
+        submitted = st.form_submit_button("উৎপাদন সম্পন্ন করুন")
+        if submitted:
+            cursor.execute("INSERT INTO production (date, product_name, size, bottles_produced) VALUES (?, ?, ?, ?)",
+                           (str(entry_date), product_name, size, bottles_produced))
+            prod_id = cursor.lastrowid
+            
+            for mat_name, mat_qty in used_materials_data:
+                if mat_qty > 0:
+                    cursor.execute("INSERT INTO production_materials (production_id, raw_material_used, raw_quantity_used) VALUES (?, ?, ?)",
+                                   (prod_id, mat_name, mat_qty))
+            
+            conn.commit()
+            st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
+
+elif menu_index == 4:
+    st.header("🚚 বিক্রয় ও সেলসম্যান হিসাব")
+    
+    salesmen = [f"SM{str(i).zfill(2)}" for i in range(1, 11)]
+    product_list = [
+        "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
+        "MG -Enzyme", "MG -AD3E", "MG -ZINC VET", "MG -Multi plus", "MG -COF NIL", 
+        "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
+    ]
+    
+    with st.form("sales_form", clear_on_submit=True):
+        entry_date = st.date_input("বিক্রয়ের তারিখ", date.today())
+        salesman = st.selectbox("সেলসম্যান আইডি", salesmen)
+        customer = st.text_input("কাস্টমার / ডিলারের নাম")
+        prod = st.selectbox("পণ্য নির্বাচন করুন", product_list)
+        size = st.selectbox("প্যাক সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
+        qty = st.number_input("বিক্রিত সংখ্যা (পিস)", min_value=1, step=1)
+        tp_value = st.number_input("রেট / মূল্য (TP Value)", min_value=0.0, step=1.0)
+        cash_received = st.number_input("নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
+        
+        submitted = st.form_submit_button("বিক্রয় সাবমিট করুন")
+        if submitted and customer.strip() != "":
+            total_bill = qty * tp_value
+            due = total_bill - cash_received
+            cursor.execute("INSERT INTO sales (date, salesman_id, customer_name, product_name, size, quantity, total_bill, cash_received, due_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (str(entry_date), salesman, customer.strip(), prod, size, qty, total_bill, cash_received, due))
+            conn.commit()
+            st.success(f"বিক্রয় সফল! মোট বিল: ৳ {total_bill:,.2f} | নগদ: ৳ {cash_received:,.2f} | বাকি: ৳ {due:,.2f}")
+
+elif menu_index == 5:
+    st.header("💵 পূর্বের বাকি টাকা আদায় এন্ট্রি")
+    st.caption("সেলসম্যান যখন কোনো কাস্টমার বা ডিলারের কাছ থেকে পূর্বে বাকি থাকা টাকা সংগ্রহ করবেন, তখন এই এন্ট্রি দিন।")
+    
+    salesmen_list = [f"SM{str(i).zfill(2)}" for i in range(1, 11)]
+    df_sales_record = pd.read_sql("SELECT DISTINCT salesman_id, customer_name FROM sales", conn)
+    
+    with st.form("due_form", clear_on_submit=True):
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            sel_salesman = st.selectbox("সেলসম্যান আইডি নির্বাচন করুন", salesmen_list)
+        with col_d2:
+            if not df_sales_record.empty and sel_salesman in df_sales_record["salesman_id"].values:
+                avail_custs = df_sales_record[df_sales_record["salesman_id"] == sel_salesman]["customer_name"].unique().tolist()
+                sel_customer = st.selectbox("কাস্টমার নির্বাচন করুন", avail_custs)
+            else:
+                sel_customer = st.text_input("কাস্টমার / ডিলারের নাম লিখুন:")
+                
+        col_date = st.date_input("টাকা আদায়ের তারিখ", date.today())
+        collected_amount = st.number_input("আদায়কৃত টাকার পরিমাণ (৳)", min_value=1.0, step=100.0)
+        note = st.text_input("মন্তব্য / নোট (যেমন: ক্যাশ, ব্যাংক বা মানি রিসিট নং)")
+        
+        sub_due = st.form_submit_button("টাকা জমা সম্পন্ন করুন")
+        if sub_due and sel_customer.strip() != "":
+            cursor.execute("INSERT INTO due_collections (date, salesman_id, customer_name, collected_amount, note) VALUES (?, ?, ?, ?, ?)",
+                           (str(col_date), sel_salesman, sel_customer.strip(), collected_amount, note))
+            conn.commit()
+            st.success(f"সফলভাবে ৳ {collected_amount:,.2f} আদায় সম্পন্ন হয়েছে এবং কাস্টমারের বকেয়া থেকে বাদ দেওয়া হয়েছে!")
+            st.rerun()
+
+elif menu_index == 6:
+    st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
+    
+    target_table = st.selectbox("কোন সেকশনের ডাটা দেখতে বা ডিলিট করতে চান?", [
+        "কাঁচামাল ক্রয় (raw_materials)",
+        "বোতল/প্যাকেট ক্রয় (packaging)",
+        "ওষুধ উৎপাদন (production)",
+        "ব্যবহৃত কাঁচামাল (production_materials)",
+        "বিক্রয় রেকর্ড (sales)",
+        "বাকি আদায় রেকর্ড (due_collections)"
+    ])
+    
+    table_map = {
+        "কাঁচামাল ক্রয় (raw_materials)": "raw_materials",
+        "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
+        "ওষুধ উৎপাদন (production)": "production",
+        "ব্যবহৃত কাঁচামাল (production_materials)": "production_materials",
+        "বিক্রয় রেকর্ড (sales)": "sales",
+        "বাকি আদায় রেকর্ড (due_collections)": "due_collections"
+    }
+    
+    selected_db_table = table_map[target_table]
+    df_current = pd.read_sql(f"SELECT * FROM {selected_db_table}", conn)
+    
+    if not df_current.empty:
+        st.write("বর্তমান এন্ট্রিগুলোর তালিকা (আইডি নম্বরসহ):")
+        st.dataframe(df_current, use_container_width=True)
+        
+        del_id = st.number_input("যে এন্ট্রিটি মুছে ফেলতে চান তার ID নম্বর লিখুন:", min_value=1, step=1)
+        if st.button("🚨 রেকর্ডটি স্থায়ীভাবে মুছে ফেলুন"):
+            cursor.execute(f"DELETE FROM {selected_db_table} WHERE id = ?", (del_id,))
+            conn.commit()
+            st.warning(f"আইডি {del_id} সফলভাবে মুছে ফেলা হয়েছে! ড্যাশবোর্ডে গিয়ে রিফ্রেশ করুন।")
+            st.rerun()
+    else:
+        st.info("এই সেকশনে বর্তমানে কোনো ডাটা নেই।")
