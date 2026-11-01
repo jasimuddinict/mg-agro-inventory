@@ -10,7 +10,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
+# বাংলা ফন্ট ও স্টাইল
+st.markdown('''
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
     
@@ -43,8 +44,9 @@ st.markdown("""
         color: #F4B41A;
     }
 </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
+# ----------------- লগইন ভেরিফিকেশন সিস্টেম -----------------
 USERS = {
     "admin": "mg1234",
     "manager": "agro2026"
@@ -78,6 +80,7 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
+# ----------------- মূল সফটওয়্যার (লগইন সফল হওয়ার পর) -----------------
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -120,6 +123,7 @@ menu_list = [
 selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
 menu_index = menu_list.index(selected_menu)
 
+# ----------------- ০. লাইভ ড্যাশবোর্ড -----------------
 if menu_index == 0:
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
@@ -283,6 +287,7 @@ if menu_index == 0:
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
+# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu_index == 1:
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
@@ -318,6 +323,7 @@ elif menu_index == 1:
             conn.commit()
             st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ২. বোতল/প্যাকেট ক্রয় -----------------
 elif menu_index == 2:
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
@@ -334,6 +340,7 @@ elif menu_index == 2:
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ৩. ওষুধ উৎপাদন এন্ট্রি -----------------
 elif menu_index == 3:
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -383,8 +390,9 @@ elif menu_index == 3:
             conn.commit()
             st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
 
+# ----------------- ৪. বিক্রয় ও চালান এন্ট্রি -----------------
 elif menu_index == 4:
-    st.header("🚚 বিক্রয় ও সেলসম্যান হিসাব")
+    st.header("🚚 বিক্রয় ও চালান (Voucher) তৈরি")
     
     salesmen = [f"SM{str(i).zfill(2)}" for i in range(1, 11)]
     product_list = [
@@ -393,25 +401,95 @@ elif menu_index == 4:
         "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
     ]
     
-    with st.form("sales_form", clear_on_submit=True):
-        entry_date = st.date_input("বিক্রয়ের তারিখ", date.today())
-        salesman = st.selectbox("সেলসম্যান আইডি", salesmen)
-        customer = st.text_input("কাস্টমার / ডিলারের নাম")
-        prod = st.selectbox("পণ্য নির্বাচন করুন", product_list)
-        size = st.selectbox("প্যাক সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
-        qty = st.number_input("বিক্রিত সংখ্যা (পিস)", min_value=1, step=1)
-        tp_value = st.number_input("রেট / মূল্য (TP Value)", min_value=0.0, step=1.0)
-        cash_received = st.number_input("নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
+    num_items = st.number_input("এই ভাউচারে কয়টি ভিন্ন ঔষধ বিক্রি করবেন?", min_value=1, max_value=15, value=1, step=1)
+    
+    with st.form("sales_form", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            entry_date = st.date_input("বিক্রয়ের তারিখ", date.today())
+            salesman = st.selectbox("সেলসম্যান আইডি", salesmen)
+        with col2:
+            customer = st.text_input("কাস্টমার / ডিলারের নাম")
+            cash_received = st.number_input("সর্বমোট নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
+            
+        st.markdown("#### 🛒 বিক্রিত ঔষধের তালিকা:")
         
-        submitted = st.form_submit_button("বিক্রয় সাবমিট করুন")
+        items_data = []
+        for i in range(num_items):
+            c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+            with c1:
+                p_name = st.selectbox(f"পণ্য #{i+1}", product_list, key=f"p_{i}")
+            with c2:
+                p_size = st.selectbox(f"সাইজ #{i+1}", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"], key=f"s_{i}")
+            with c3:
+                p_qty = st.number_input(f"সংখ্যা (পিস) #{i+1}", min_value=1, step=1, key=f"q_{i}")
+            with c4:
+                p_rate = st.number_input(f"রেট (TP) #{i+1}", min_value=0.0, step=1.0, key=f"r_{i}")
+            items_data.append({"name": p_name, "size": p_size, "qty": p_qty, "rate": p_rate})
+            
+        submitted = st.form_submit_button("ভাউচার তৈরি করুন ও সেভ করুন")
+        
         if submitted and customer.strip() != "":
-            total_bill = qty * tp_value
-            due = total_bill - cash_received
-            cursor.execute("INSERT INTO sales (date, salesman_id, customer_name, product_name, size, quantity, total_bill, cash_received, due_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (str(entry_date), salesman, customer.strip(), prod, size, qty, total_bill, cash_received, due))
+            grand_total = sum(item["qty"] * item["rate"] for item in items_data)
+            total_due = grand_total - cash_received
+            
+            # ডাটাবেসে সেভ করা
+            for idx, item in enumerate(items_data):
+                item_bill = item["qty"] * item["rate"]
+                if idx == 0:
+                    row_cash = cash_received
+                    row_due = total_due
+                else:
+                    row_cash = 0.0
+                    row_due = 0.0
+                    
+                cursor.execute("INSERT INTO sales (date, salesman_id, customer_name, product_name, size, quantity, total_bill, cash_received, due_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                               (str(entry_date), salesman, customer.strip(), item["name"], item["size"], item["qty"], item_bill, row_cash, row_due))
             conn.commit()
-            st.success(f"বিক্রয় সফল! মোট বিল: ৳ {total_bill:,.2f} | নগদ: ৳ {cash_received:,.2f} | বাকি: ৳ {due:,.2f}")
+            
+            st.success("✅ বিক্রয় সফলভাবে ডাটাবেসে সেভ হয়েছে!")
+            
+            # --- সুন্দর ভাউচার (Invoice) প্রদর্শন ---
+            st.markdown("### 🧾 ইনভয়েস / ভাউচার")
+            voucher_html = f'''
+            <div style="border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #f8fafc; color: #000;">
+                <h2 style="text-align: center; color: #102A72; margin-bottom: 5px;">এমজি এগ্রো ফার্মা</h2>
+                <p style="text-align: center; margin-top: 0; color: #64748B;">বিক্রয় চালান (Invoice)</p>
+                <hr style="border-top: 1px solid #ccc;">
+                <p><strong>তারিখ:</strong> {entry_date}</p>
+                <p><strong>কাস্টমার:</strong> {customer.strip()} | <strong>সেলসম্যান:</strong> {salesman}</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <tr style="background-color: #e2e8f0; color: #000;">
+                        <th style="padding: 8px; border: 1px solid #ccc;">পণ্য ও সাইজ</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: center;">পরিমাণ</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">রেট</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">মোট মূল্য</th>
+                    </tr>
+            '''
+            
+            for item in items_data:
+                item_total = item['qty'] * item['rate']
+                voucher_html += f'''
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ccc;">{item['name']} ({item['size']})</td>
+                        <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">{item['qty']}</td>
+                        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">৳ {item['rate']:,.2f}</td>
+                        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">৳ {item_total:,.2f}</td>
+                    </tr>
+                '''
+                
+            voucher_html += f'''
+                </table>
+                <hr style="border-top: 1px solid #ccc; margin-top: 20px;">
+                <p style="text-align: right; margin: 5px 0;"><strong>সর্বমোট বিল:</strong> ৳ {grand_total:,.2f}</p>
+                <p style="text-align: right; margin: 5px 0; color: green;"><strong>নগদ জমা:</strong> ৳ {cash_received:,.2f}</p>
+                <p style="text-align: right; margin: 5px 0; color: red;"><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>
+                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #64748B;">ধন্যবাদ! আবার আসবেন।</p>
+            </div>
+            '''
+            st.markdown(voucher_html, unsafe_allow_html=True)
 
+# ----------------- ৫. বাকি টাকা আদায় (Due Receive) -----------------
 elif menu_index == 5:
     st.header("💵 পূর্বের বাকি টাকা আদায় এন্ট্রি")
     st.caption("সেলসম্যান যখন কোনো কাস্টমার বা ডিলারের কাছ থেকে পূর্বে বাকি থাকা টাকা সংগ্রহ করবেন, তখন এই এন্ট্রি দিন।")
@@ -442,6 +520,7 @@ elif menu_index == 5:
             st.success(f"সফলভাবে ৳ {collected_amount:,.2f} আদায় সম্পন্ন হয়েছে এবং কাস্টমারের বকেয়া থেকে বাদ দেওয়া হয়েছে!")
             st.rerun()
 
+# ----------------- ৬. রেকর্ড সংশোধন ও ডিলিট -----------------
 elif menu_index == 6:
     st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
     
