@@ -96,10 +96,9 @@ if selected_key == "dashboard":
     
     col1, col2, col3, col4 = st.columns(4)
     
-    total_raw_cost = df_raw["total_cost"].sum() if not df_raw.empty else 0.0
-    total_pack_cost = df_pack["total_cost"].sum() if not df_pack.empty else 0.0
-    total_sales = df_sales["total_bill"].sum() if not df_sales.empty else 0.0
+    total_raw_cost = float(df_raw["total_cost"].sum()) if not df_raw.empty else 0.0
+    total_pack_cost = float(df_pack["total_cost"].sum()) if not df_pack.empty else 0.0
+    total_sales = float(df_sales["total_bill"].sum()) if not df_sales.empty else 0.0
     
-    initial_due = df_sales["due_amount"].sum() if not df_sales.empty else 0.0
-    total_collected = df_due_col["collected_amount"].sum() if not df_due_col.empty else 0.0
-    current_net_due = initial_due - total
+    initial_due = float(df_sales["due_amount"].sum()) if not df_sales.empty else 0.0
+    total_collected =
