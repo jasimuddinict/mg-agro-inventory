@@ -588,7 +588,8 @@ elif menu_index == 6:
         "বোতল/প্যাকেট ক্রয় (packaging)",
         "ওষুধ উৎপাদন (production)",
         "বিক্রয় রেকর্ড (sales)",
-        "বাকি আদায় রেকর্ড (due_collections)"
+        "বাকি আদায় রেকর্ড (due_collections)",
+        "কাঁচামালের নামের তালিকা (item_list)"
     ])
     
     table_map = {
@@ -596,7 +597,8 @@ elif menu_index == 6:
         "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
         "ওষুধ উৎপাদন (production)": "production",
         "বিক্রয় রেকর্ড (sales)": "sales",
-        "বাকি আদায় রেকর্ড (due_collections)": "due_collections"
+        "বাকি আদায় রেকর্ড (due_collections)": "due_collections",
+        "কাঁচামালের নামের তালিকা (item_list)": "item_list"
     }
     
     selected_db_table = table_map[target_table]
