@@ -10,6 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# স্টাইল ও বাংলা ফন্ট
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -38,6 +39,50 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ----------------- লগইন ভেরিফিকেশন সিস্টেম -----------------
+USERS = {
+    "admin": "mg1234",
+    "manager": "agro2026"
+}
+
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+
+def login_form():
+    st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)")
+    st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.subheader("🔐 সফটওয়্যারে প্রবেশ করুন")
+        username_input = st.text_input("ইউজারনেম (Username):")
+        password_input = st.text_input("পাসওয়ার্ড (Password):", type="password")
+        
+        if st.button("লগইন করুন"):
+            if username_input in USERS and USERS[username_input] == password_input:
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = username_input
+                st.success("লগইন সফল হয়েছে!")
+                st.rerun()
+            else:
+                st.error("ভুল ইউজারনেম অথবা পাসওয়ার্ড! আবার চেষ্টা করুন।")
+
+if not st.session_state["logged_in"]:
+    login_form()
+    st.stop()
+
+# ----------------- মূল সফটওয়্যার (লগইন হওয়ার পর) -----------------
+# সাইডবারে লগআউট বাটন
+st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
+if st.sidebar.button("🚪 লগআউট (Logout)"):
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+    st.rerun()
+
+st.sidebar.markdown("---")
 
 conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
 cursor = conn.cursor()
@@ -76,6 +121,7 @@ selected_key = st.sidebar.radio(
     format_func=lambda x: menu_options[x]
 )
 
+# ----------------- ১. লাইভ ড্যাশবোর্ড -----------------
 if selected_key == "dashboard":
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
@@ -248,6 +294,7 @@ if selected_key == "dashboard":
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
+# ----------------- ২. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif selected_key == "raw_purchase":
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
@@ -285,6 +332,7 @@ elif selected_key == "raw_purchase":
             conn.commit()
             st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ৩. বোতল/প্যাকেট ক্রয় -----------------
 elif selected_key == "packaging_purchase":
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
@@ -301,6 +349,7 @@ elif selected_key == "packaging_purchase":
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি -----------------
 elif selected_key == "production":
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -350,6 +399,7 @@ elif selected_key == "production":
             conn.commit()
             st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
 
+# ----------------- ৫. বিক্রয় ও ডেলিভারি এন্ট্রি -----------------
 elif selected_key == "sales":
     st.header("🚚 বিক্রয় ও সেলসম্যান হিসাব")
     
@@ -379,6 +429,7 @@ elif selected_key == "sales":
             conn.commit()
             st.success(f"বিক্রয় সফল! মোট বিল: ৳ {total_bill:,.2f} | নগদ: ৳ {cash_received:,.2f} | বাকি: ৳ {due:,.2f}")
 
+# ----------------- ৬. বাকি টাকা আদায় (Due Receive) -----------------
 elif selected_key == "due_collection":
     st.header("💵 পূর্বের বাকি টাকা আদায় এন্ট্রি")
     st.caption("সেলসম্যান যখন কোনো কাস্টমার বা ডিলারের কাছ থেকে পূর্বে বাকি থাকা টাকা সংগ্রহ করবেন, তখন এই এন্ট্রি দিন।")
@@ -409,6 +460,7 @@ elif selected_key == "due_collection":
             st.success(f"সফলভাবে ৳ {collected_amount:,.2f} আদায় সম্পন্ন হয়েছে এবং কাস্টমারের বকেয়া থেকে বাদ দেওয়া হয়েছে!")
             st.rerun()
 
+# ----------------- ৭. রেকর্ড সংশোধন ও ডিলিট -----------------
 elif selected_key == "records":
     st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
     
