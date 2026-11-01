@@ -259,6 +259,47 @@ if menu_index == 0:
     
     st.markdown("---")
     
+    # ---------------- রিপোর্ট ডাউনলোড ও ডাটাবেস ব্যাকআপ ----------------
+    col_dl1, col_dl2 = st.columns(2)
+    
+    # Excel Report Download
+    with col_dl1:
+        try:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
+                df_pack.to_excel(writer, sheet_name='Packaging', index=False)
+                df_prod.to_excel(writer, sheet_name='Production', index=False)
+                df_used.to_excel(writer, sheet_name='Used Materials', index=False)
+                df_sales.to_excel(writer, sheet_name='Sales', index=False)
+                df_due_col.to_excel(writer, sheet_name='Due Collections', index=False)
+            processed_data = output.getvalue()
+            
+            st.download_button(
+                label="📊 সম্পূর্ণ রিপোর্ট ডাউনলোড করুন (Excel)",
+                data=processed_data,
+                file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except Exception:
+            pass
+
+    # Complete DB File Download
+    with col_dl2:
+        try:
+            with open("mg_agro_pharma.db", "rb") as db_file:
+                db_content = db_file.read()
+                st.download_button(
+                    label="⬇️ সম্পূর্ণ ডাটাবেস (.db) ব্যাকআপ নিন",
+                    data=db_content,
+                    file_name=f"mg_agro_pharma_backup_{date.today()}.db",
+                    mime="application/octet-stream"
+                )
+        except Exception as e:
+            st.warning("ডাটাবেস ফাইলটি ডাউনলোড করার সময় একটি সমস্যা হয়েছে।")
+
+    st.markdown("---")
+    
     # ---------------- লো-স্টক অ্যালার্ট সিস্টেম ----------------
     st.subheader("🚨 লো-স্টক অ্যালার্ট (Low Stock Warning)")
     alerts = []
