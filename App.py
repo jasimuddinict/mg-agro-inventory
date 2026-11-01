@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# বাংলা ফন্ট ও স্টাইল
 st.markdown('''
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -43,10 +42,31 @@ st.markdown('''
         background-color: #0b1e52;
         color: #F4B41A;
     }
+    
+    @media print {
+        header, .stSidebar, [data-testid="stSidebar"], .st-emotion-cache-18ni7ap {
+            display: none !important;
+        }
+        .stApp {
+            background-color: white !important;
+        }
+        #invoice-print-area {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        button {
+            display: none !important;
+        }
+    }
 </style>
 ''', unsafe_allow_html=True)
 
-# ----------------- লগইন ভেরিফিকেশন সিস্টেম -----------------
 USERS = {
     "admin": "mg1234",
     "manager": "agro2026"
@@ -80,7 +100,6 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-# ----------------- মূল সফটওয়্যার (লগইন সফল হওয়ার পর) -----------------
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -123,7 +142,6 @@ menu_list = [
 selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
 menu_index = menu_list.index(selected_menu)
 
-# ----------------- ০. লাইভ ড্যাশবোর্ড -----------------
 if menu_index == 0:
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
@@ -287,7 +305,6 @@ if menu_index == 0:
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
-# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu_index == 1:
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
@@ -323,7 +340,6 @@ elif menu_index == 1:
             conn.commit()
             st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ২. বোতল/প্যাকেট ক্রয় -----------------
 elif menu_index == 2:
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
@@ -340,7 +356,6 @@ elif menu_index == 2:
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৩. ওষুধ উৎপাদন এন্ট্রি -----------------
 elif menu_index == 3:
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -390,7 +405,6 @@ elif menu_index == 3:
             conn.commit()
             st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
 
-# ----------------- ৪. বিক্রয় ও চালান এন্ট্রি -----------------
 elif menu_index == 4:
     st.header("🚚 বিক্রয় ও চালান (Voucher) তৈরি")
     
@@ -433,7 +447,6 @@ elif menu_index == 4:
             grand_total = sum(item["qty"] * item["rate"] for item in items_data)
             total_due = grand_total - cash_received
             
-            # ডাটাবেসে সেভ করা
             for idx, item in enumerate(items_data):
                 item_bill = item["qty"] * item["rate"]
                 if idx == 0:
@@ -449,47 +462,48 @@ elif menu_index == 4:
             
             st.success("✅ বিক্রয় সফলভাবে ডাটাবেসে সেভ হয়েছে!")
             
-            # --- সুন্দর ভাউচার (Invoice) প্রদর্শন ---
+            # --- ইনভয়েস / ভাউচার তৈরি (Raw HTML Fix) ---
             st.markdown("### 🧾 ইনভয়েস / ভাউচার")
-            voucher_html = f'''
-            <div style="border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #f8fafc; color: #000;">
-                <h2 style="text-align: center; color: #102A72; margin-bottom: 5px;">এমজি এগ্রো ফার্মা</h2>
-                <p style="text-align: center; margin-top: 0; color: #64748B;">বিক্রয় চালান (Invoice)</p>
-                <hr style="border-top: 1px solid #ccc;">
-                <p><strong>তারিখ:</strong> {entry_date}</p>
-                <p><strong>কাস্টমার:</strong> {customer.strip()} | <strong>সেলসম্যান:</strong> {salesman}</p>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-                    <tr style="background-color: #e2e8f0; color: #000;">
-                        <th style="padding: 8px; border: 1px solid #ccc;">পণ্য ও সাইজ</th>
-                        <th style="padding: 8px; border: 1px solid #ccc; text-align: center;">পরিমাণ</th>
-                        <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">রেট</th>
-                        <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">মোট মূল্য</th>
-                    </tr>
-            '''
+            
+            voucher_html = ""
+            voucher_html += "<div id='invoice-print-area' style='border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #f8fafc; color: #000; font-family: inherit;'>"
+            voucher_html += "<h2 style='text-align: center; color: #102A72; margin-bottom: 5px;'>এমজি এগ্রো ফার্মা</h2>"
+            voucher_html += "<p style='text-align: center; margin-top: 0; color: #64748B;'>বিক্রয় চালান (Invoice)</p>"
+            voucher_html += "<hr style='border-top: 1px solid #ccc;'>"
+            voucher_html += f"<p><strong>তারিখ:</strong> {entry_date}</p>"
+            voucher_html += f"<p><strong>কাস্টমার:</strong> {customer.strip()} | <strong>সেলসম্যান:</strong> {salesman}</p>"
+            voucher_html += "<table style='width: 100%; border-collapse: collapse; margin-top: 15px;'>"
+            voucher_html += "<tr style='background-color: #e2e8f0; color: #000;'>"
+            voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: left;'>পণ্য ও সাইজ</th>"
+            voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: center;'>পরিমাণ</th>"
+            voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: right;'>রেট</th>"
+            voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: right;'>মোট মূল্য</th>"
+            voucher_html += "</tr>"
             
             for item in items_data:
                 item_total = item['qty'] * item['rate']
-                voucher_html += f'''
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ccc;">{item['name']} ({item['size']})</td>
-                        <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">{item['qty']}</td>
-                        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">৳ {item['rate']:,.2f}</td>
-                        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">৳ {item_total:,.2f}</td>
-                    </tr>
-                '''
+                voucher_html += "<tr>"
+                voucher_html += f"<td style='padding: 8px; border: 1px solid #ccc;'>{item['name']} ({item['size']})</td>"
+                voucher_html += f"<td style='padding: 8px; border: 1px solid #ccc; text-align: center;'>{item['qty']}</td>"
+                voucher_html += f"<td style='padding: 8px; border: 1px solid #ccc; text-align: right;'>৳ {item['rate']:,.2f}</td>"
+                voucher_html += f"<td style='padding: 8px; border: 1px solid #ccc; text-align: right;'>৳ {item_total:,.2f}</td>"
+                voucher_html += "</tr>"
                 
-            voucher_html += f'''
-                </table>
-                <hr style="border-top: 1px solid #ccc; margin-top: 20px;">
-                <p style="text-align: right; margin: 5px 0;"><strong>সর্বমোট বিল:</strong> ৳ {grand_total:,.2f}</p>
-                <p style="text-align: right; margin: 5px 0; color: green;"><strong>নগদ জমা:</strong> ৳ {cash_received:,.2f}</p>
-                <p style="text-align: right; margin: 5px 0; color: red;"><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>
-                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #64748B;">ধন্যবাদ! আবার আসবেন।</p>
-            </div>
-            '''
+            voucher_html += "</table>"
+            voucher_html += "<hr style='border-top: 1px solid #ccc; margin-top: 20px;'>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0;'><strong>সর্বমোট বিল:</strong> ৳ {grand_total:,.2f}</p>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: green;'><strong>नগদ জমা:</strong> ৳ {cash_received:,.2f}</p>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: red;'><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>"
+            voucher_html += "<p style='text-align: center; margin-top: 30px; font-size: 12px; color: #64748B;'>ধন্যবাদ! আবার আসবেন।</p>"
+            
+            # Print Button inside Voucher
+            voucher_html += "<div style='text-align: center; margin-top: 20px;'>"
+            voucher_html += "<button onclick='window.print()' style='background-color: #102A72; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-family: inherit;'>🖨️ ইনভয়েস প্রিন্ট করুন</button>"
+            voucher_html += "</div>"
+            
+            voucher_html += "</div>"
             st.markdown(voucher_html, unsafe_allow_html=True)
 
-# ----------------- ৫. বাকি টাকা আদায় (Due Receive) -----------------
 elif menu_index == 5:
     st.header("💵 পূর্বের বাকি টাকা আদায় এন্ট্রি")
     st.caption("সেলসম্যান যখন কোনো কাস্টমার বা ডিলারের কাছ থেকে পূর্বে বাকি থাকা টাকা সংগ্রহ করবেন, তখন এই এন্ট্রি দিন।")
@@ -520,7 +534,6 @@ elif menu_index == 5:
             st.success(f"সফলভাবে ৳ {collected_amount:,.2f} আদায় সম্পন্ন হয়েছে এবং কাস্টমারের বকেয়া থেকে বাদ দেওয়া হয়েছে!")
             st.rerun()
 
-# ----------------- ৬. রেকর্ড সংশোধন ও ডিলিট -----------------
 elif menu_index == 6:
     st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
     
