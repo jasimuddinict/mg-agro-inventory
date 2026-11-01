@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
 import io
 
 st.set_page_config(
@@ -10,6 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# চমৎকার বাংলা ফন্ট ও স্টাইল
 st.markdown('''
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -67,14 +68,18 @@ st.markdown('''
 </style>
 ''', unsafe_allow_html=True)
 
+# ----------------- রোল-ভিত্তিক লগইন সিস্টেম -----------------
 USERS = {
-    "admin": "mg1234",
-    "manager": "agro2026"
+    "admin": {"pass": "mg1234", "role": "admin", "name": "অ্যাডমিন"},
+    "manager": {"pass": "agro2026", "role": "manager", "name": "ম্যানেজার"},
+    "salesman1": {"pass": "sm1234", "role": "salesman", "name": "সেলসম্যান ০১"}
 }
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
+    st.session_state["role"] = ""
+    st.session_state["user_name"] = ""
 
 def login_form():
     st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)")
@@ -88,9 +93,11 @@ def login_form():
         password_input = st.text_input("পাসওয়ার্ড (Password):", type="password")
         
         if st.button("লগইন করুন"):
-            if username_input in USERS and USERS[username_input] == password_input:
+            if username_input in USERS and USERS[username_input]["pass"] == password_input:
                 st.session_state["logged_in"] = True
                 st.session_state["username"] = username_input
+                st.session_state["role"] = USERS[username_input]["role"]
+                st.session_state["user_name"] = USERS[username_input]["name"]
                 st.success("লগইন সফল হয়েছে!")
                 st.rerun()
             else:
@@ -100,10 +107,13 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
+# ----------------- মূল সফটওয়্যার (লগইন সফল হওয়ার পর) -----------------
+st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['user_name']}** ({st.session_state['role'].capitalize()})")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
+    st.session_state["role"] = ""
+    st.session_state["user_name"] = ""
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -111,6 +121,7 @@ st.sidebar.markdown("---")
 conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# ডাটাবেস টেবিল তৈরি
 cursor.execute("CREATE TABLE IF NOT EXISTS item_list (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)")
 cursor.execute("CREATE TABLE IF NOT EXISTS raw_materials (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, item_name TEXT, unit TEXT, quantity REAL, cost_per_unit REAL, total_cost REAL)")
 cursor.execute("CREATE TABLE IF NOT EXISTS packaging (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, bottle_size TEXT, quantity INTEGER, unit_price REAL, total_cost REAL)")
@@ -129,7 +140,8 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-menu_list = [
+# রোল-ভিত্তিক মেন্যু তালিকা
+all_menus = [
     "📊 লাইভ ড্যাশবোর্ড", 
     "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
     "🧴 বোতল/প্যাকেট ক্রয়", 
@@ -139,12 +151,29 @@ menu_list = [
     "🗑️ রেকর্ড সংশোধন ও ডিলিট"
 ]
 
-selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
-menu_index = menu_list.index(selected_menu)
+if st.session_state["role"] == "salesman":
+    menu_list = ["🚚 বিক্রয় ও চালান এন্ট্রি", "💵 বাকি টাকা আদায় (Due Receive)"]
+else:
+    menu_list = all_menus
 
+selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
+# get absolute index
+menu_index = all_menus.index(selected_menu)
+
+# ----------------- ০. লাইভ ড্যাশবোর্ড -----------------
 if menu_index == 0:
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
+    # তারিখ ফিল্টার
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        start_date = st.date_input("শুরুর তারিখ", date.today().replace(day=1))
+    with col_d2:
+        end_date = st.date_input("শেষ তারিখ", date.today())
+        
+    st.markdown("---")
+    
+    # ডেটা রিড
     df_raw = pd.read_sql("SELECT * FROM raw_materials", conn)
     df_pack = pd.read_sql("SELECT * FROM packaging", conn)
     df_prod = pd.read_sql("SELECT * FROM production", conn)
@@ -152,144 +181,120 @@ if menu_index == 0:
     df_sales = pd.read_sql("SELECT * FROM sales", conn)
     df_due_col = pd.read_sql("SELECT * FROM due_collections", conn)
     
+    # তারিখ অনুযায়ী ফিল্টার করা ডেটা (হিসাবের জন্য)
+    # ডেটা টাইপ রূপান্তর নিশ্চিত করা
+    if not df_raw.empty: df_raw['date'] = pd.to_datetime(df_raw['date']).dt.date
+    if not df_pack.empty: df_pack['date'] = pd.to_datetime(df_pack['date']).dt.date
+    if not df_prod.empty: df_prod['date'] = pd.to_datetime(df_prod['date']).dt.date
+    if not df_sales.empty: df_sales['date'] = pd.to_datetime(df_sales['date']).dt.date
+    if not df_due_col.empty: df_due_col['date'] = pd.to_datetime(df_due_col['date']).dt.date
+    
+    # Filter function
+    def filter_by_date(df):
+        if df.empty: return df
+        mask = (df['date'] >= start_date) & (df['date'] <= end_date)
+        return df.loc[mask]
+
+    f_raw = filter_by_date(df_raw)
+    f_pack = filter_by_date(df_pack)
+    f_sales = filter_by_date(df_sales)
+    f_due_col = filter_by_date(df_due_col)
+    
     col1, col2, col3, col4 = st.columns(4)
     
-    total_raw_cost = float(df_raw["total_cost"].sum()) if not df_raw.empty else 0.0
-    total_pack_cost = float(df_pack["total_cost"].sum()) if not df_pack.empty else 0.0
-    total_sales = float(df_sales["total_bill"].sum()) if not df_sales.empty else 0.0
+    total_raw_cost = float(f_raw["total_cost"].sum()) if not f_raw.empty else 0.0
+    total_pack_cost = float(f_pack["total_cost"].sum()) if not f_pack.empty else 0.0
+    total_sales = float(f_sales["total_bill"].sum()) if not f_sales.empty else 0.0
     
+    # বাকি টাকার হিসাব (সব সময়ের ভিত্তিতে)
     initial_due = float(df_sales["due_amount"].sum()) if not df_sales.empty else 0.0
     total_collected = float(df_due_col["collected_amount"].sum()) if not df_due_col.empty else 0.0
     net_remaining_due = initial_due - total_collected
     
-    col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
-    col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
-    col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
-    col4.metric("মার্কেটে বর্তমান আসল বাকি (Due)", f"৳ {net_remaining_due:,.2f}")
+    col1.metric(f"মোট কাঁচামাল ক্রয় (ফিল্টারড)", f"৳ {total_raw_cost:,.2f}")
+    col2.metric(f"মোট প্যাকেজিং খরচ (ফিল্টারড)", f"৳ {total_pack_cost:,.2f}")
+    col3.metric(f"মোট বিক্রয় বিল (ফিল্টারড)", f"৳ {total_sales:,.2f}")
+    col4.metric("মার্কেটে বর্তমান আসল বাকি (মোট)", f"৳ {net_remaining_due:,.2f}")
     
     st.markdown("---")
     
-    try:
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
-            df_pack.to_excel(writer, sheet_name='Packaging', index=False)
-            df_prod.to_excel(writer, sheet_name='Production', index=False)
-            df_used.to_excel(writer, sheet_name='Used Materials', index=False)
-            df_sales.to_excel(writer, sheet_name='Sales', index=False)
-            df_due_col.to_excel(writer, sheet_name='Due Collections', index=False)
-        processed_data = output.getvalue()
-        
-        st.download_button(
-            label="📥 সম্পূর্ণ ইনভেন্টরি ও কালেকশন রিপোর্ট ডাউনলোড করুন (Excel)",
-            data=processed_data,
-            file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    except Exception:
-        pass
-
-    st.markdown("---")
+    # ---------------- লো-স্টক অ্যালার্ট সিস্টেম ----------------
+    st.subheader("🚨 লো-স্টক অ্যালার্ট (Low Stock Warning)")
+    alerts = []
     
-    st.subheader("📦 তৈরি ওষুধের বর্তমান মজুদ (Finished Goods Stock)")
+    # Raw Material Stock
+    raw_stock_df = pd.DataFrame()
+    if not df_raw.empty:
+        raw_in = df_raw.groupby(["item_name", "unit"])["quantity"].sum().reset_index()
+        if not df_used.empty:
+            raw_out = df_used.groupby("raw_material_used")["raw_quantity_used"].sum().reset_index()
+            raw_stock_df = pd.merge(raw_in, raw_out, left_on="item_name", right_on="raw_material_used", how="left").fillna(0)
+            raw_stock_df["current_stock"] = raw_stock_df["quantity"] - raw_stock_df["raw_quantity_used"]
+        else:
+            raw_stock_df = raw_in.copy()
+            raw_stock_df["current_stock"] = raw_stock_df["quantity"]
+            
+        for _, row in raw_stock_df.iterrows():
+            if row["current_stock"] <= 5.0: # 5 kg/ltr warning limit
+                alerts.append(f"⚠️ কাঁচামাল **{row['item_name']}** এর স্টক কমে **{row['current_stock']} {row['unit']}** এ নেমেছে!")
+                
+    # Finished Goods Stock
+    stock_df = pd.DataFrame()
     if not df_prod.empty:
         prod_summary = df_prod.groupby(["product_name", "size"])["bottles_produced"].sum().reset_index()
         if not df_sales.empty:
             sales_summary = df_sales.groupby(["product_name", "size"])["quantity"].sum().reset_index()
             stock_df = pd.merge(prod_summary, sales_summary, on=["product_name", "size"], how="left").fillna(0)
-            stock_df["বর্তমান স্টক (বোতল)"] = stock_df["bottles_produced"] - stock_df["quantity"]
+            stock_df["current_stock"] = stock_df["bottles_produced"] - stock_df["quantity"]
         else:
-            stock_df = prod_summary
-            stock_df["বর্তমান স্টক (বোতল)"] = stock_df["bottles_produced"]
-            stock_df["quantity"] = 0
+            stock_df = prod_summary.copy()
+            stock_df["current_stock"] = stock_df["bottles_produced"]
             
-        stock_df.rename(columns={"product_name": "ওষুধের নাম", "size": "সাইজ", "bottles_produced": "মোট উৎপাদন", "quantity": "মোট বিক্রয়"}, inplace=True)
+        for _, row in stock_df.iterrows():
+            if row["current_stock"] <= 50: # 50 bottles warning limit
+                alerts.append(f"⚠️ তৈরি ঔষধ **{row['product_name']} ({row['size']})** এর স্টক কমে মাত্র **{row['current_stock']} পিস** আছে!")
+                
+    if alerts:
+        for alert in alerts:
+            st.error(alert)
+    else:
+        st.success("✅ সমস্ত কাঁচামাল এবং তৈরি ঔষধের স্টক পর্যাপ্ত পরিমাণে রয়েছে।")
+        
+    st.markdown("---")
+
+    st.subheader("📦 তৈরি ওষুধের বর্তমান মজুদ (Finished Goods Stock)")
+    if not stock_df.empty:
+        display_stock = stock_df.copy()
+        display_stock.rename(columns={"product_name": "ওষুধের নাম", "size": "সাইজ", "bottles_produced": "মোট উৎপাদন", "quantity": "মোট বিক্রয়", "current_stock": "বর্তমান স্টক (বোতল)"}, inplace=True)
         cols_prod = ["ওষুধের নাম", "সাইজ", "মোট উৎপাদন", "মোট বিক্রয়", "বর্তমান স্টক (বোতল)"]
-        st.dataframe(stock_df[cols_prod], use_container_width=True)
+        st.dataframe(display_stock[cols_prod], use_container_width=True)
     else:
         st.info("এখনো কোনো উৎপাদন রেকর্ড নেই।")
 
     st.subheader("🧪 কাঁচামালের বর্তমান মজুদ (Raw Material Stock)")
-    if not df_raw.empty:
-        raw_in = df_raw.groupby(["item_name", "unit"])["quantity"].sum().reset_index()
-        if not df_used.empty:
-            raw_out = df_used.groupby("raw_material_used")["raw_quantity_used"].sum().reset_index()
-            raw_stock = pd.merge(raw_in, raw_out, left_on="item_name", right_on="raw_material_used", how="left").fillna(0)
-            raw_stock["অবশিষ্ট স্টক"] = raw_stock["quantity"] - raw_stock["raw_quantity_used"]
-        else:
-            raw_stock = raw_in
-            raw_stock["raw_quantity_used"] = 0
-            raw_stock["অবশিষ্ট স্টক"] = raw_stock["quantity"]
-            
-        raw_stock.rename(columns={"item_name": "কাঁচামালের নাম", "unit": "একক", "quantity": "মোট ক্রয়", "raw_quantity_used": "মোট ব্যবহার"}, inplace=True)
+    if not raw_stock_df.empty:
+        display_raw = raw_stock_df.copy()
+        display_raw.rename(columns={"item_name": "কাঁচামালের নাম", "unit": "একক", "quantity": "মোট ক্রয়", "raw_quantity_used": "মোট ব্যবহার", "current_stock": "অবশিষ্ট স্টক"}, inplace=True)
         cols_raw = ["কাঁচামালের নাম", "একক", "মোট ক্রয়", "মোট ব্যবহার", "অবশিষ্ট স্টক"]
-        st.dataframe(raw_stock[cols_raw], use_container_width=True)
+        st.dataframe(display_raw[cols_raw], use_container_width=True)
     else:
         st.info("এখনো কোনো কাঁচামাল ক্রয় এন্ট্রি নেই।")
 
-    st.subheader("🧴 খালি বোতল ও প্যাকেটের বর্তমান মজুদ (Packaging Stock)")
-    if not df_pack.empty:
-        pack_in = df_pack.groupby("bottle_size")["quantity"].sum().reset_index()
-        if not df_prod.empty:
-            pack_out = df_prod.groupby("size")["bottles_produced"].sum().reset_index()
-            pack_stock = pd.merge(pack_in, pack_out, left_on="bottle_size", right_on="size", how="left").fillna(0)
-            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"] - pack_stock["bottles_produced"]
-        else:
-            pack_stock = pack_in
-            pack_stock["bottles_produced"] = 0
-            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"]
-            
-        pack_stock.rename(columns={"bottle_size": "বোতল/প্যাকেট সাইজ", "quantity": "মোট ক্রয় (পিস)", "bottles_produced": "উৎপাদনে ব্যবহৃত (পিস)"}, inplace=True)
-        cols_pack = ["বোতল/প্যাকেট সাইজ", "মোট ক্রয় (পিস)", "উৎপাদনে ব্যবহৃত (পিস)", "অবশিষ্ট স্টক (পিস)"]
-        st.dataframe(pack_stock[cols_pack], use_container_width=True)
-    else:
-        st.info("এখনো কোনো বোতল/প্যাকেট ক্রয় এন্ট্রি নেই।")
-
     st.markdown("---")
-    st.subheader("👥 সেলসম্যান ও কাস্টমারভিত্তিক বিক্রয়, আদায় ও বাকি খতিয়ান")
+    st.subheader("👥 কাস্টমারভিত্তিক বিক্রয়, আদায় ও বাকি খতিয়ান (সর্বকালের)")
     
     if not df_sales.empty:
-        sm_sales = df_sales.groupby("salesman_id").agg({
+        cust_sales = df_sales.groupby("customer_name").agg({
             "total_bill": "sum",
             "cash_received": "sum",
             "due_amount": "sum"
         }).reset_index()
         
         if not df_due_col.empty:
-            sm_rec = df_due_col.groupby("salesman_id")["collected_amount"].sum().reset_index()
-            sm_summary = pd.merge(sm_sales, sm_rec, on="salesman_id", how="left").fillna(0)
-        else:
-            sm_summary = sm_sales
-            sm_summary["collected_amount"] = 0
-            
-        sm_summary["মোট নগদ আদায় (৳)"] = sm_summary["cash_received"] + sm_summary["collected_amount"]
-        sm_summary["বর্তমান আসল বাকি (৳)"] = sm_summary["due_amount"] - sm_summary["collected_amount"]
-        
-        sm_summary.rename(columns={
-            "salesman_id": "সেলসম্যান আইডি",
-            "total_bill": "মোট বিক্রি (৳)",
-            "cash_received": "বিক্রিতে নগদ (৳)",
-            "collected_amount": "পরে আদায়কৃত বাকি (৳)"
-        }, inplace=True)
-        
-        st.write("📌 **সকল সেলসম্যানের সারসংক্ষেপ:**")
-        cols_sm = ["সেলসম্যান আইডি", "মোট বিক্রি (৳)", "বিক্রিতে নগদ (৳)", "পরে আদায়কৃত বাকি (৳)", "মোট নগদ আদায় (৳)", "বর্তমান আসল বাকি (৳)"]
-        st.dataframe(sm_summary[cols_sm], use_container_width=True)
-        
-        st.write("🔍 **নির্দিষ্ট সেলসম্যানের কাস্টমারভিত্তিক বাকি তালিকা:**")
-        selected_sm = st.selectbox("কোন সেলসম্যানের কাস্টমার লিস্ট দেখতে চান?", sm_summary["সেলসম্যান আইডি"].unique())
-        
-        cust_sales = df_sales[df_sales["salesman_id"] == selected_sm].groupby("customer_name").agg({
-            "total_bill": "sum",
-            "cash_received": "sum",
-            "due_amount": "sum"
-        }).reset_index()
-        
-        if not df_due_col.empty:
-            cust_rec = df_due_col[df_due_col["salesman_id"] == selected_sm].groupby("customer_name")["collected_amount"].sum().reset_index()
+            cust_rec = df_due_col.groupby("customer_name")["collected_amount"].sum().reset_index()
             cust_df = pd.merge(cust_sales, cust_rec, on="customer_name", how="left").fillna(0)
         else:
-            cust_df = cust_sales
+            cust_df = cust_sales.copy()
             cust_df["collected_amount"] = 0
             
         cust_df["পরিশোধিত মোট টাকা (৳)"] = cust_df["cash_received"] + cust_df["collected_amount"]
@@ -305,6 +310,7 @@ if menu_index == 0:
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
+# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu_index == 1:
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
@@ -340,6 +346,7 @@ elif menu_index == 1:
             conn.commit()
             st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ২. বোতল/প্যাকেট ক্রয় -----------------
 elif menu_index == 2:
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
@@ -356,6 +363,7 @@ elif menu_index == 2:
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
+# ----------------- ৩. ওষুধ উৎপাদন এন্ট্রি -----------------
 elif menu_index == 3:
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -405,6 +413,7 @@ elif menu_index == 3:
             conn.commit()
             st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
 
+# ----------------- ৪. বিক্রয় ও চালান এন্ট্রি -----------------
 elif menu_index == 4:
     st.header("🚚 বিক্রয় ও চালান (Voucher) তৈরি")
     
@@ -462,9 +471,7 @@ elif menu_index == 4:
             
             st.success("✅ বিক্রয় সফলভাবে ডাটাবেসে সেভ হয়েছে!")
             
-            # --- ইনভয়েস / ভাউচার তৈরি (Raw HTML Fix) ---
             st.markdown("### 🧾 ইনভয়েস / ভাউচার")
-            
             voucher_html = ""
             voucher_html += "<div id='invoice-print-area' style='border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #f8fafc; color: #000; font-family: inherit;'>"
             voucher_html += "<h2 style='text-align: center; color: #102A72; margin-bottom: 5px;'>এমজি এগ্রো ফার্মা</h2>"
@@ -495,15 +502,12 @@ elif menu_index == 4:
             voucher_html += f"<p style='text-align: right; margin: 5px 0; color: green;'><strong>नগদ জমা:</strong> ৳ {cash_received:,.2f}</p>"
             voucher_html += f"<p style='text-align: right; margin: 5px 0; color: red;'><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>"
             voucher_html += "<p style='text-align: center; margin-top: 30px; font-size: 12px; color: #64748B;'>ধন্যবাদ! আবার আসবেন।</p>"
-            
-            # Print Button inside Voucher
             voucher_html += "<div style='text-align: center; margin-top: 20px;'>"
             voucher_html += "<button onclick='window.print()' style='background-color: #102A72; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-family: inherit;'>🖨️ ইনভয়েস প্রিন্ট করুন</button>"
-            voucher_html += "</div>"
-            
-            voucher_html += "</div>"
+            voucher_html += "</div></div>"
             st.markdown(voucher_html, unsafe_allow_html=True)
 
+# ----------------- ৫. বাকি টাকা আদায় (Due Receive) -----------------
 elif menu_index == 5:
     st.header("💵 পূর্বের বাকি টাকা আদায় এন্ট্রি")
     st.caption("সেলসম্যান যখন কোনো কাস্টমার বা ডিলারের কাছ থেকে পূর্বে বাকি থাকা টাকা সংগ্রহ করবেন, তখন এই এন্ট্রি দিন।")
@@ -534,14 +538,14 @@ elif menu_index == 5:
             st.success(f"সফলভাবে ৳ {collected_amount:,.2f} আদায় সম্পন্ন হয়েছে এবং কাস্টমারের বকেয়া থেকে বাদ দেওয়া হয়েছে!")
             st.rerun()
 
+# ----------------- ৬. রেকর্ড সংশোধন ও ডিলিট -----------------
 elif menu_index == 6:
-    st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
+    st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা (Edit / Delete)")
     
-    target_table = st.selectbox("কোন সেকশনের ডাটা দেখতে বা ডিলিট করতে চান?", [
+    target_table = st.selectbox("কোন সেকশনের ডাটা দেখতে বা সংশোধন করতে চান?", [
         "কাঁচামাল ক্রয় (raw_materials)",
         "বোতল/প্যাকেট ক্রয় (packaging)",
         "ওষুধ উৎপাদন (production)",
-        "ব্যবহৃত কাঁচামাল (production_materials)",
         "বিক্রয় রেকর্ড (sales)",
         "বাকি আদায় রেকর্ড (due_collections)"
     ])
@@ -550,7 +554,6 @@ elif menu_index == 6:
         "কাঁচামাল ক্রয় (raw_materials)": "raw_materials",
         "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
         "ওষুধ উৎপাদন (production)": "production",
-        "ব্যবহৃত কাঁচামাল (production_materials)": "production_materials",
         "বিক্রয় রেকর্ড (sales)": "sales",
         "বাকি আদায় রেকর্ড (due_collections)": "due_collections"
     }
@@ -562,11 +565,57 @@ elif menu_index == 6:
         st.write("বর্তমান এন্ট্রিগুলোর তালিকা (আইডি নম্বরসহ):")
         st.dataframe(df_current, use_container_width=True)
         
-        del_id = st.number_input("যে এন্ট্রিটি মুছে ফেলতে চান তার ID নম্বর লিখুন:", min_value=1, step=1)
-        if st.button("🚨 রেকর্ডটি স্থায়ীভাবে মুছে ফেলুন"):
-            cursor.execute(f"DELETE FROM {selected_db_table} WHERE id = ?", (del_id,))
-            conn.commit()
-            st.warning(f"আইডি {del_id} সফলভাবে মুছে ফেলা হয়েছে! ড্যাশবোর্ডে গিয়ে রিফ্রেশ করুন।")
-            st.rerun()
+        st.markdown("---")
+        st.subheader("🛠️ একশন নির্বাচন করুন")
+        action = st.radio("আপনি কি করতে চান?", ["ডিলিট (Delete) করুন", "সংশোধন (Edit) করুন"], horizontal=True)
+        
+        target_id = st.number_input("যে এন্ট্রিটি পরিবর্তন বা মুছে ফেলতে চান তার ID নম্বর লিখুন:", min_value=1, step=1)
+        
+        # Check if ID exists
+        row_exists = not df_current[df_current['id'] == target_id].empty
+        
+        if action == "ডিলিট (Delete) করুন":
+            if st.button("🚨 রেকর্ডটি স্থায়ীভাবে মুছে ফেলুন"):
+                if row_exists:
+                    cursor.execute(f"DELETE FROM {selected_db_table} WHERE id = ?", (target_id,))
+                    conn.commit()
+                    st.warning(f"আইডি {target_id} সফলভাবে মুছে ফেলা হয়েছে!")
+                    st.rerun()
+                else:
+                    st.error("এই আইডির কোনো ডেটা পাওয়া যায়নি!")
+                    
+        elif action == "সংশোধন (Edit) করুন":
+            if row_exists:
+                st.info("নিচের ফিল্ডগুলো এডিট করে আপডেট বাটনে ক্লিক করুন:")
+                row_data = df_current[df_current['id'] == target_id].iloc[0]
+                
+                # Exclude ID from editing
+                editable_cols = [col for col in df_current.columns if col != 'id']
+                
+                with st.form("edit_form"):
+                    new_values = {}
+                    for col in editable_cols:
+                        old_val = row_data[col]
+                        # Create dynamic input based on data type
+                        if pd.isna(old_val):
+                            old_val = ""
+                        
+                        if isinstance(old_val, (int, float, int)):
+                            new_values[col] = st.number_input(f"{col}", value=float(old_val))
+                        else:
+                            new_values[col] = st.text_input(f"{col}", value=str(old_val))
+                            
+                    if st.form_submit_button("✅ আপডেট করুন"):
+                        # Generate SQL update query dynamically
+                        set_clause = ", ".join([f"{col} = ?" for col in editable_cols])
+                        values_tuple = tuple(new_values[col] for col in editable_cols) + (target_id,)
+                        
+                        query = f"UPDATE {selected_db_table} SET {set_clause} WHERE id = ?"
+                        cursor.execute(query, values_tuple)
+                        conn.commit()
+                        st.success(f"আইডি {target_id} সফলভাবে আপডেট করা হয়েছে!")
+                        st.rerun()
+            else:
+                st.warning("সঠিক আইডি নম্বর দিন।")
     else:
         st.info("এই সেকশনে বর্তমানে কোনো ডাটা নেই।")
