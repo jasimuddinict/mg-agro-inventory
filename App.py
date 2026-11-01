@@ -45,7 +45,7 @@ st.markdown("""
 conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# টেবিল তৈরি
+# প্রয়োজনীয় টেবিল তৈরি
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS item_list (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,21 +134,26 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-# মেন্যু তালিকা
-MENU_ITEMS = [
-    "📊 লাইভ ড্যাশবোর্ড", 
-    "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
-    "🧴 বোতল/প্যাকেট ক্রয়", 
-    "⚙️ ওষুধ উৎপাদন এন্ট্রি", 
-    "🚚 বিক্রয় ও চালান এন্ট্রি",
-    "💵 বাকি টাকা আদায় (Due Receive)",
-    "🗑️ রেকর্ড সংশোধন ও ডিলিট"
-]
+# নিরাপদ মেনু ডিকশনারি (ইউনিকোড সমস্যা মুক্ত)
+menu_options = {
+    "dashboard": "📊 লাইভ ড্যাশবোর্ড",
+    "raw_purchase": "🧪 কাঁচামাল ক্রয় এন্ট্রি",
+    "packaging_purchase": "🧴 বোতল/প্যাকেট ক্রয়",
+    "production": "⚙️ ওষুধ উৎপাদন এন্ট্রি",
+    "sales": "🚚 বিক্রয় ও চালান এন্ট্রি",
+    "due_collection": "💵 বাকি টাকা আদায় (Due Receive)",
+    "records": "🗑️ রেকর্ড সংশোধন ও ডিলিট"
+}
 
-menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", MENU_ITEMS)
+# সাইডবার মেনু
+selected_key = st.sidebar.radio(
+    "মেন্যু নির্বাচন করুন:",
+    options=list(menu_options.keys()),
+    format_func=lambda x: menu_options[x]
+)
 
 # ----------------- ১. লাইভ ড্যাশবোর্ড -----------------
-if menu == MENU_ITEMS[0]:
+if selected_key == "dashboard":
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
     df_raw = pd.read_sql("SELECT * FROM raw_materials", conn)
@@ -158,21 +163,4 @@ if menu == MENU_ITEMS[0]:
     df_sales = pd.read_sql("SELECT * FROM sales", conn)
     df_due_col = pd.read_sql("SELECT * FROM due_collections", conn)
     
-    col1, col2, col3, col4 = st.columns(4)
-    
-    total_raw_cost = df_raw["total_cost"].sum() if not df_raw.empty else 0
-    total_pack_cost = df_pack["total_cost"].sum() if not df_pack.empty else 0
-    total_sales = df_sales["total_bill"].sum() if not df_sales.empty else 0
-    
-    initial_due = df_sales["due_amount"].sum() if not df_sales.empty else 0
-    total_collected = df_due_col["collected_amount"].sum() if not df_due_col.empty else 0
-    current_net_due = initial_due - total_collected
-    
-    col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
-    col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
-    col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
-    col4.metric("মার্কেটে বর্তমান আসল বাকি (Due)", f"৳ {current_net_due:,.2f}")
-    
-    st.markdown("---")
-    
-    # এক্সেল ডাউনলোড
+    col1, col2, col
