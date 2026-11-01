@@ -206,11 +206,28 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     else:
         st.info("এখনো কোনো কাঁচামাল ক্রয় এন্ট্রি নেই।")
 
+    # বোতল ও প্যাকেটের মজুদ
+    st.subheader("🧴 খালি বোতল ও প্যাকেটের বর্তমান মজুদ (Packaging Stock)")
+    if not df_pack.empty:
+        pack_in = df_pack.groupby("bottle_size")["quantity"].sum().reset_index()
+        if not df_prod.empty:
+            pack_out = df_prod.groupby("size")["bottles_produced"].sum().reset_index()
+            pack_stock = pd.merge(pack_in, pack_out, left_on="bottle_size", right_on="size", how="left").fillna(0)
+            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"] - pack_stock["bottles_produced"]
+        else:
+            pack_stock = pack_in
+            pack_stock["bottles_produced"] = 0
+            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"]
+            
+        pack_stock.rename(columns={"bottle_size": "বোতল/প্যাকেট সাইজ", "quantity": "মোট ক্রয় (পিস)", "bottles_produced": "উৎপাদনে ব্যবহৃত (পিস)"}, inplace=True)
+        st.dataframe(pack_stock[["বোতল/প্যাকেট সাইজ", "মোট ক্রয় (পিস)", "উৎপাদনে ব্যবহৃত (পিস)", "অবশিষ্ট স্টক (পিস)"]], use_container_width=True)
+    else:
+        st.info("এখনো কোনো বোতল/প্যাকেট ক্রয় এন্ট্রি নেই।")
+
 # ----------------- ২. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu == "🧪 কাঁচামাল ক্রয় এন্ট্রি":
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
-    # নতুন কাঁচামাল তালিকায় পার্মানেন্টলি যুক্ত করার অপশন
     with st.expander("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে এখানে ক্লিক করুন"):
         new_item_to_add = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
         if st.button("তালিকায় যুক্ত করুন"):
@@ -228,7 +245,6 @@ elif menu == "🧪 কাঁচামাল ক্রয় এন্ট্রি":
     st.markdown("---")
     st.subheader("ক্রয় ভাউচার এন্ট্রি")
     
-    # ডাটাবেস থেকে সব আইটেম রিড করা
     db_items = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
 
     with st.form("raw_purchase_form", clear_on_submit=True):
@@ -251,7 +267,7 @@ elif menu == "🧴 বোতল/প্যাকেট ক্রয়":
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
         entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
-        bottle_size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200 ml", "250 ml", "500 ml", "1000 ml", "অন্যান্য"])
+        bottle_size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg", "অন্যান্য"])
         qty = st.number_input("বোতলের সংখ্যা (পিস)", min_value=0, step=1)
         price_unit = st.number_input("প্রতি পিস বোতলের দাম", min_value=0.0, step=0.1)
         
@@ -279,7 +295,7 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     with st.form("prod_form", clear_on_submit=True):
         entry_date = st.date_input("উৎপাদনের তারিখ", date.today())
         product_name = st.selectbox("ওষুধের নাম", product_list)
-        size = st.selectbox("বোতলের সাইজ", ["100ml", "200 ml", "500 ml", "1000 ml", "100gm", "1kg"])
+        size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
         bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
         
         st.markdown("##### ব্যবহৃত কাঁচামাল:")
@@ -307,7 +323,7 @@ elif menu == "🚚 বিক্রয় ও চালান এন্ট্র�
         salesman = st.selectbox("সেলসম্যান আইডি", salesmen)
         customer = st.text_input("কাস্টমার / ডিলারের নাম")
         prod = st.selectbox("পণ্য নির্বাচন করুন", product_list)
-        size = st.selectbox("প্যাক সাইজ", ["100ml", "200 ml", "500 ml", "1000 ml"])
+        size = st.selectbox("প্যাক সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
         qty = st.number_input("বিক্রিত সংখ্যা (পিস)", min_value=1, step=1)
         tp_value = st.number_input("রেট / মূল্য (TP Value)", min_value=0.0, step=1.0)
         cash_received = st.number_input("নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
