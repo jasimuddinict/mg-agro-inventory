@@ -46,81 +46,13 @@ conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
 cursor = conn.cursor()
 
 # প্রয়োজনীয় টেবিল তৈরি
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS item_list (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS raw_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    item_name TEXT,
-    unit TEXT,
-    quantity REAL,
-    cost_per_unit REAL,
-    total_cost REAL
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS packaging (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    bottle_size TEXT,
-    quantity INTEGER,
-    unit_price REAL,
-    total_cost REAL
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS production (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    product_name TEXT,
-    size TEXT,
-    bottles_produced INTEGER
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS production_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    production_id INTEGER,
-    raw_material_used TEXT,
-    raw_quantity_used REAL,
-    FOREIGN KEY(production_id) REFERENCES production(id)
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS sales (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    salesman_id TEXT,
-    customer_name TEXT,
-    product_name TEXT,
-    size TEXT,
-    quantity INTEGER,
-    total_bill REAL,
-    cash_received REAL,
-    due_amount REAL
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS due_collections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    salesman_id TEXT,
-    customer_name TEXT,
-    collected_amount REAL,
-    note TEXT
-)
-""")
+cursor.execute("CREATE TABLE IF NOT EXISTS item_list (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)")
+cursor.execute("CREATE TABLE IF NOT EXISTS raw_materials (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, item_name TEXT, unit TEXT, quantity REAL, cost_per_unit REAL, total_cost REAL)")
+cursor.execute("CREATE TABLE IF NOT EXISTS packaging (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, bottle_size TEXT, quantity INTEGER, unit_price REAL, total_cost REAL)")
+cursor.execute("CREATE TABLE IF NOT EXISTS production (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, product_name TEXT, size TEXT, bottles_produced INTEGER)")
+cursor.execute("CREATE TABLE IF NOT EXISTS production_materials (id INTEGER PRIMARY KEY AUTOINCREMENT, production_id INTEGER, raw_material_used TEXT, raw_quantity_used REAL)")
+cursor.execute("CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, salesman_id TEXT, customer_name TEXT, product_name TEXT, size TEXT, quantity INTEGER, total_bill REAL, cash_received REAL, due_amount REAL)")
+cursor.execute("CREATE TABLE IF NOT EXISTS due_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, salesman_id TEXT, customer_name TEXT, collected_amount REAL, note TEXT)")
 conn.commit()
 
 # ডিফল্ট কাঁচামাল নিশ্চিত করা
@@ -170,40 +102,4 @@ if selected_key == "dashboard":
     
     initial_due = df_sales["due_amount"].sum() if not df_sales.empty else 0.0
     total_collected = df_due_col["collected_amount"].sum() if not df_due_col.empty else 0.0
-    current_net_due = initial_due - total_collected
-    
-    col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
-    col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
-    col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
-    col4.metric("মার্কেটে বর্তমান আসল বাকি (Due)", f"৳ {current_net_due:,.2f}")
-    
-    st.markdown("---")
-    
-    # এক্সেল ডাউনলোড বাটন
-    try:
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
-            df_pack.to_excel(writer, sheet_name='Packaging', index=False)
-            df_prod.to_excel(writer, sheet_name='Production', index=False)
-            df_used.to_excel(writer, sheet_name='Used Materials', index=False)
-            df_sales.to_excel(writer, sheet_name='Sales', index=False)
-            df_due_col.to_excel(writer, sheet_name='Due Collections', index=False)
-        processed_data = output.getvalue()
-        
-        st.download_button(
-            label="📥 সম্পূর্ণ ইনভেন্টরি ও কালেকশন রিপোর্ট ডাউনলোড করুন (Excel)",
-            data=processed_data,
-            file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    except Exception:
-        pass
-
-    st.markdown("---")
-    
-    # তৈরি পণ্যের বর্তমান স্টক
-    st.subheader("📦 তৈরি ওষুধের বর্তমান মজুদ (Finished Goods Stock)")
-    if not df_prod.empty:
-        prod_summary = df_prod.groupby(["product_name", "size"])["bottles_produced"].sum().reset_index()
-        if not df_sales.empty:
+    current_net_due = initial_due - total
