@@ -2,11 +2,12 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import date
+import io
 
 # পেজ কনফিগারেশন
 st.set_page_config(page_title="MG Agro Pharma Inventory", layout="wide", initial_sidebar_state="expanded")
 
-# সুন্দর বাংলা ফন্ট ও মডার্ন সিএসএস (Hind Siliguri Font)
+# সুন্দর বাংলা ফন্ট ও মডার্ন সিএসএস
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -104,7 +105,14 @@ st.markdown("---")
 # মেন্যু নির্বাচন
 menu = st.sidebar.radio(
     "মেন্যু নির্বাচন করুন:",
-    ["📊 লাইভ ড্যাশবোর্ড", "🧪 কাঁচামাল ক্রয় এন্ট্রি", "🧴 বোতল/প্যাকেট ক্রয়", "⚙️ ওষুধ উৎপাদন এন্ট্রি", "🚚 বিক্রয় ও চালান এন্ট্রি"]
+    [
+        "📊 লাইভ ড্যাশবোর্ড", 
+        "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
+        "🧴 বোতল/প্যাকেট ক্রয়", 
+        "⚙️ ওষুধ উৎপাদন এন্ট্রি", 
+        "🚚 বিক্রয় ও চালান এন্ট্রি",
+        "🗑️ রেকর্ড সংশোধন ও ডিলিট"
+    ]
 )
 
 # ----------------- ১. লাইভ ড্যাশবোর্ড -----------------
@@ -127,6 +135,25 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
     col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
     col4.metric("মার্কেটে মোট বাকি (Due)", f"৳ {total_due:,.2f}")
+    
+    st.markdown("---")
+    
+    # এক্সেল রিপোর্ট ডাউনলোড সেকশন
+    st.subheader("📥 এক্সেল রিপোর্ট ডাউনলোড")
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
+        df_pack.to_excel(writer, sheet_name='Packaging', index=False)
+        df_prod.to_excel(writer, sheet_name='Production', index=False)
+        df_sales.to_excel(writer, sheet_name='Sales', index=False)
+    processed_data = output.getvalue()
+    
+    st.download_button(
+        label="📊 সম্পূর্ণ ইনভেন্টরি রিপোর্ট ডাউনলোড করুন (Excel)",
+        data=processed_data,
+        file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
     
     st.markdown("---")
     
@@ -263,3 +290,37 @@ elif menu == "🚚 বিক্রয় ও চালান এন্ট্র�
             """, (str(entry_date), salesman, customer, prod, size, qty, total_bill, cash_received, due))
             conn.commit()
             st.success(f"বিক্রয় সফল! মোট বিল: ৳ {total_bill:,.2f} | নগদ: ৳ {cash_received:,.2f} | বাকি: ৳ {due:,.2f}")
+
+# ----------------- ৬. রেকর্ড সংশোধন ও ডিলিট -----------------
+elif menu == "🗑️ রেকর্ড সংশোধন ও ডিলিট":
+    st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
+    
+    target_table = st.selectbox("কোন সেকশনের ডাটা দেখতে বা ডিলিট করতে চান?", [
+        "কাঁচামাল ক্রয় (raw_materials)",
+        "বোতল/প্যাকেট ক্রয় (packaging)",
+        "ওষুধ উৎপাদন (production)",
+        "বিক্রয় রেকর্ড (sales)"
+    ])
+    
+    table_map = {
+        "কাঁচামাল ক্রয় (raw_materials)": "raw_materials",
+        "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
+        "ওষুধ উৎপাদন (production)": "production",
+        "বিক্রয় রেকর্ড (sales)": "sales"
+    }
+    
+    selected_db_table = table_map[target_table]
+    df_current = pd.read_sql(f"SELECT * FROM {selected_db_table}", conn)
+    
+    if not df_current.empty:
+        st.write("বর্তমান এন্ট্রিগুলোর তালিকা (আইডি নম্বরসহ):")
+        st.dataframe(df_current, use_container_width=True)
+        
+        del_id = st.number_input("যে এন্ট্রিটি মুছে ফেলতে চান তার ID নম্বর লিখুন:", min_value=1, step=1)
+        if st.button("🚨 রেকর্ডটি স্থায়ীভাবে মুছে ফেলুন"):
+            cursor.execute(f"DELETE FROM {selected_db_table} WHERE id = ?", (del_id,))
+            conn.commit()
+            st.warning(f"আইডি {del_id} সফলভাবে মুছে ফেলা হয়েছে! ড্যাশবোর্ডে গিয়ে রিফ্রেশ করুন।")
+            st.rerun()
+    else:
+        st.info("এই সেকশনে বর্তমানে কোনো ডাটা নেই।")
