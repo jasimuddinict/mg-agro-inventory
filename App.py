@@ -7,7 +7,7 @@ import io
 # পেজ কনফিগারেশন
 st.set_page_config(page_title="MG Agro Pharma Inventory", layout="wide", initial_sidebar_state="expanded")
 
-# সুন্দর বাংলা ফন্ট ও মডার্ন সিএসএস
+# সুন্দর বাংলা ফন্ট ও ডিজাইন
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -46,6 +46,13 @@ conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
 cursor = conn.cursor()
 
 # টেবিল তৈরি
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS item_list (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE
+)
+""")
+
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS raw_materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,6 +104,12 @@ CREATE TABLE IF NOT EXISTS sales (
 """)
 conn.commit()
 
+# ডিফল্ট কাঁচামাল নিশ্চিত করা
+default_items = ["Zinc", "Acid", "Calcium", "Vitamin AD3E", "Magnesium", "Cobalt"]
+for d_item in default_items:
+    cursor.execute("INSERT OR IGNORE INTO item_list (name) VALUES (?)", (d_item,))
+conn.commit()
+
 # হেডার
 st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)")
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
@@ -138,7 +151,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     
     st.markdown("---")
     
-    # এক্সেল রিপোর্ট ডাউনলোড সেকশন
+    # এক্সেল ডাউনলোড বাটন
     st.subheader("📥 এক্সেল রিপোর্ট ডাউনলোড")
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -157,7 +170,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     
     st.markdown("---")
     
-    # ফিনিশড প্রডাক্ট স্টক
+    # তৈরি পণ্যের স্টক
     st.subheader("📦 তৈরি ওষুধের বর্তমান মজুদ (Finished Goods Stock)")
     if not df_prod.empty:
         prod_summary = df_prod.groupby(["product_name", "size"])["bottles_produced"].sum().reset_index()
@@ -175,7 +188,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     else:
         st.info("এখনো কোনো উৎপাদন রেকর্ড নেই।")
 
-    # কাঁচামালের বর্তমান স্টক
+    # কাঁচামালের স্টক
     st.subheader("🧪 কাঁচামালের বর্তমান মজুদ (Raw Material Stock)")
     if not df_raw.empty:
         raw_in = df_raw.groupby(["item_name", "unit"])["quantity"].sum().reset_index()
@@ -195,12 +208,32 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
 
 # ----------------- ২. কাঁচামাল ক্রয় এন্ট্রি -----------------
 elif menu == "🧪 কাঁচামাল ক্রয় এন্ট্রি":
-    st.header("🧪 নতুন কাঁচামাল ক্রয় ইনপুট")
-    with st.form("raw_form", clear_on_submit=True):
+    st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
+    
+    # নতুন কাঁচামাল তালিকায় পার্মানেন্টলি যুক্ত করার অপশন
+    with st.expander("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে এখানে ক্লিক করুন"):
+        new_item_to_add = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
+        if st.button("তালিকায় যুক্ত করুন"):
+            if new_item_to_add.strip() != "":
+                try:
+                    cursor.execute("INSERT INTO item_list (name) VALUES (?)", (new_item_to_add.strip(),))
+                    conn.commit()
+                    st.success(f"'{new_item_to_add}' সফলভাবে ড্রপডাউনে যুক্ত হয়েছে!")
+                    st.rerun()
+                except sqlite3.IntegrityError:
+                    st.warning("এই নামটি ইতিমধ্যে তালিকায় রয়েছে।")
+            else:
+                st.error("দয়া করে কাঁচামালের নাম লিখুন।")
+
+    st.markdown("---")
+    st.subheader("ক্রয় ভাউচার এন্ট্রি")
+    
+    # ডাটাবেস থেকে সব আইটেম রিড করা
+    db_items = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
+
+    with st.form("raw_purchase_form", clear_on_submit=True):
         entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
-        item_name = st.selectbox("কাঁচামালের নাম", ["Zinc", "Acid", "Calcium", "Vitamin AD3E", "অন্যান্য"])
-        if item_name == "অন্যান্য":
-            item_name = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
+        item_name = st.selectbox("কাঁচামাল নির্বাচন করুন", db_items)
         unit = st.selectbox("পরিমাপের একক", ["Kg", "Ltr", "Gram", "MG"])
         qty = st.number_input("পরিমাণ (Quantity)", min_value=0.0, step=0.1)
         cost_unit = st.number_input("প্রতি এককের দর (Rate/Unit)", min_value=0.0, step=1.0)
@@ -219,8 +252,6 @@ elif menu == "🧴 বোতল/প্যাকেট ক্রয়":
     with st.form("pack_form", clear_on_submit=True):
         entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
         bottle_size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200 ml", "250 ml", "500 ml", "1000 ml", "অন্যান্য"])
-        if bottle_size == "অন্যান্য":
-            bottle_size = st.text_input("সাইজ লিখুন:")
         qty = st.number_input("বোতলের সংখ্যা (পিস)", min_value=0, step=1)
         price_unit = st.number_input("প্রতি পিস বোতলের দাম", min_value=0.0, step=0.1)
         
@@ -243,6 +274,8 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
         "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
     ]
     
+    raw_materials_available = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
+    
     with st.form("prod_form", clear_on_submit=True):
         entry_date = st.date_input("উৎপাদনের তারিখ", date.today())
         product_name = st.selectbox("ওষুধের নাম", product_list)
@@ -250,7 +283,7 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
         bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
         
         st.markdown("##### ব্যবহৃত কাঁচামাল:")
-        raw_used = st.selectbox("কোন কাঁচামাল ব্যবহার হয়েছে?", ["Zinc", "Acid", "Calcium", "Vitamin AD3E", "অন্যান্য"])
+        raw_used = st.selectbox("কোন কাঁচামাল ব্যবহার হয়েছে?", raw_materials_available)
         raw_qty = st.number_input("ব্যবহৃত কাঁচামালের পরিমাণ (Kg/Ltr)", min_value=0.0, step=0.1)
         
         submitted = st.form_submit_button("উৎপাদন সম্পন্ন করুন")
@@ -277,7 +310,6 @@ elif menu == "🚚 বিক্রয় ও চালান এন্ট্র�
         size = st.selectbox("প্যাক সাইজ", ["100ml", "200 ml", "500 ml", "1000 ml"])
         qty = st.number_input("বিক্রিত সংখ্যা (পিস)", min_value=1, step=1)
         tp_value = st.number_input("রেট / মূল্য (TP Value)", min_value=0.0, step=1.0)
-        
         cash_received = st.number_input("নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
         
         submitted = st.form_submit_button("বিক্রয় সাবমিট করুন")
