@@ -4,7 +4,41 @@ import pandas as pd
 from datetime import date
 
 # পেজ কনফিগারেশন
-st.set_page_config(page_title="MG Agro Pharma Inventory", layout="wide")
+st.set_page_config(page_title="MG Agro Pharma Inventory", layout="wide", initial_sidebar_state="expanded")
+
+# সুন্দর বাংলা ফন্ট ও মডার্ন সিএসএস (Hind Siliguri Font)
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"], div, p, span, h1, h2, h3, h4, label, input, button, select {
+        font-family: 'Hind Siliguri', sans-serif !important;
+    }
+    
+    .stMetric {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    .stButton > button {
+        background-color: #102A72;
+        color: white;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        padding: 8px 24px;
+        transition: 0.3s;
+    }
+    
+    .stButton > button:hover {
+        background-color: #0b1e52;
+        color: #F4B41A;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ডাটাবেস ইনিশিয়ালাইজেশন
 conn = sqlite3.connect("mg_agro_pharma.db", check_same_thread=False)
@@ -64,7 +98,7 @@ conn.commit()
 
 # হেডার
 st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)")
-st.subheader("স্বয়ংক্রিয় ইনভেন্টরি ও সেলস ম্যানেজমেন্ট সিস্টেম")
+st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
 # মেন্যু নির্বাচন
@@ -77,7 +111,6 @@ menu = st.sidebar.radio(
 if menu == "📊 লাইভ ড্যাশবোর্ড":
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
-    # ডেটা লোড
     df_raw = pd.read_sql("SELECT * FROM raw_materials", conn)
     df_pack = pd.read_sql("SELECT * FROM packaging", conn)
     df_prod = pd.read_sql("SELECT * FROM production", conn)
@@ -93,7 +126,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
     col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
     col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
-    col4.metric("মার্কেটে মোট বাকি (Due)", f"৳ {total_due:,.2f}", delta_color="inverse")
+    col4.metric("মার্কেটে মোট বাকি (Due)", f"৳ {total_due:,.2f}")
     
     st.markdown("---")
     
