@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# চমৎকার বাংলা ফন্ট ও স্টাইল
+# চমৎকার বাংলা ফন্ট ও কালারফুল ব্র্যান্ড স্টাইল (Navy Blue, Orange, Golden Yellow)
 st.markdown('''
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -19,31 +19,72 @@ st.markdown('''
         font-family: 'Hind Siliguri', sans-serif !important;
     }
     
+    /* হেডলাইন কালার (Deep Navy Blue) */
+    h1, h2, h3 {
+        color: #102A72 !important;
+    }
+    
     [data-testid="stIconMaterial"], .material-symbols-rounded, .material-icons {
         font-family: 'Material Symbols Rounded', 'Material Icons' !important;
     }
 
-    .stMetric {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
+    /* কালারফুল মেট্রিক কার্ড (ড্যাশবোর্ড) */
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-left: 5px solid #F97316; /* Orange Accent */
         border-radius: 10px;
-        padding: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        padding: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: transform 0.2s ease-in-out;
     }
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+        border-left: 5px solid #F4B41A; /* Golden Yellow on hover */
+    }
+
+    /* বাটন ডিজাইন (Navy Blue to Golden Yellow transition) */
     .stButton > button {
-        background-color: #102A72;
+        background: linear-gradient(90deg, #102A72 0%, #1a3a8f 100%);
         color: white;
         font-weight: 600;
         border-radius: 8px;
         border: none;
         padding: 8px 24px;
-        transition: 0.3s;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(16, 42, 114, 0.3);
     }
     .stButton > button:hover {
-        background-color: #0b1e52;
-        color: #F4B41A;
+        background: linear-gradient(90deg, #0b1e52 0%, #102A72 100%);
+        color: #F4B41A !important;
+        box-shadow: 0 4px 10px rgba(16, 42, 114, 0.4);
+        transform: scale(1.02);
     }
     
+    /* সাইডবার মেন্যু হোভার ইফেক্ট */
+    .stRadio div[role="radiogroup"] label {
+        background-color: #ffffff;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 5px;
+        border: 1px solid #e2e8f0;
+        transition: 0.3s;
+    }
+    .stRadio div[role="radiogroup"] label:hover {
+        border-color: #F97316;
+        background-color: #fff7ed;
+    }
+
+    /* ফর্মের ব্যাকগ্রাউন্ড */
+    [data-testid="stForm"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-top: 4px solid #102A72;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px;
+    }
+
     @media print {
         header, .stSidebar, [data-testid="stSidebar"], .st-emotion-cache-18ni7ap {
             display: none !important;
@@ -473,14 +514,14 @@ elif menu_index == 4:
             
             st.markdown("### 🧾 ইনভয়েস / ভাউচার")
             voucher_html = ""
-            voucher_html += "<div id='invoice-print-area' style='border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #f8fafc; color: #000; font-family: inherit;'>"
+            voucher_html += "<div id='invoice-print-area' style='border: 2px dashed #102A72; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; background-color: #ffffff; color: #000; font-family: inherit; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>"
             voucher_html += "<h2 style='text-align: center; color: #102A72; margin-bottom: 5px;'>এমজি এগ্রো ফার্মা</h2>"
             voucher_html += "<p style='text-align: center; margin-top: 0; color: #64748B;'>বিক্রয় চালান (Invoice)</p>"
             voucher_html += "<hr style='border-top: 1px solid #ccc;'>"
             voucher_html += f"<p><strong>তারিখ:</strong> {entry_date}</p>"
             voucher_html += f"<p><strong>কাস্টমার:</strong> {customer.strip()} | <strong>সেলসম্যান:</strong> {salesman}</p>"
             voucher_html += "<table style='width: 100%; border-collapse: collapse; margin-top: 15px;'>"
-            voucher_html += "<tr style='background-color: #e2e8f0; color: #000;'>"
+            voucher_html += "<tr style='background-color: #102A72; color: #ffffff;'>"
             voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: left;'>পণ্য ও সাইজ</th>"
             voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: center;'>পরিমাণ</th>"
             voucher_html += "<th style='padding: 8px; border: 1px solid #ccc; text-align: right;'>রেট</th>"
@@ -498,12 +539,12 @@ elif menu_index == 4:
                 
             voucher_html += "</table>"
             voucher_html += "<hr style='border-top: 1px solid #ccc; margin-top: 20px;'>"
-            voucher_html += f"<p style='text-align: right; margin: 5px 0;'><strong>সর্বমোট বিল:</strong> ৳ {grand_total:,.2f}</p>"
-            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: green;'><strong>नগদ জমা:</strong> ৳ {cash_received:,.2f}</p>"
-            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: red;'><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0; font-size: 16px;'><strong>সর্বমোট বিল:</strong> ৳ {grand_total:,.2f}</p>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: #16a34a; font-size: 16px;'><strong>नগদ জমা:</strong> ৳ {cash_received:,.2f}</p>"
+            voucher_html += f"<p style='text-align: right; margin: 5px 0; color: #dc2626; font-size: 16px;'><strong>বর্তমান বাকি:</strong> ৳ {total_due:,.2f}</p>"
             voucher_html += "<p style='text-align: center; margin-top: 30px; font-size: 12px; color: #64748B;'>ধন্যবাদ! আবার আসবেন।</p>"
             voucher_html += "<div style='text-align: center; margin-top: 20px;'>"
-            voucher_html += "<button onclick='window.print()' style='background-color: #102A72; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-family: inherit;'>🖨️ ইনভয়েস প্রিন্ট করুন</button>"
+            voucher_html += "<button onclick='window.print()' style='background-color: #F97316; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-family: inherit;'>🖨️ ইনভয়েস প্রিন্ট করুন</button>"
             voucher_html += "</div></div>"
             st.markdown(voucher_html, unsafe_allow_html=True)
 
