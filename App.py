@@ -110,6 +110,17 @@ CREATE TABLE IF NOT EXISTS sales (
     due_amount REAL
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS due_collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT,
+    salesman_id TEXT,
+    customer_name TEXT,
+    collected_amount REAL,
+    note TEXT
+)
+""")
 conn.commit()
 
 # ডিফল্ট কাঁচামাল নিশ্চিত করা
@@ -132,6 +143,7 @@ menu = st.sidebar.radio(
         "🧴 বোতল/প্যাকেট ক্রয়", 
         "⚙️ ওষুধ উৎপাদন এন্ট্রি", 
         "🚚 বিক্রয় ও চালান এন্ট্রি",
+        "💵 বাকি টাকা আদায় (Due Receive)",
         "🗑️ রেকর্ড সংশোধন ও ডিলিট"
     ]
 )
@@ -145,18 +157,22 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     df_prod = pd.read_sql("SELECT * FROM production", conn)
     df_used = pd.read_sql("SELECT * FROM production_materials", conn)
     df_sales = pd.read_sql("SELECT * FROM sales", conn)
+    df_due_col = pd.read_sql("SELECT * FROM due_collections", conn)
     
     col1, col2, col3, col4 = st.columns(4)
     
     total_raw_cost = df_raw["total_cost"].sum() if not df_raw.empty else 0
     total_pack_cost = df_pack["total_cost"].sum() if not df_pack.empty else 0
     total_sales = df_sales["total_bill"].sum() if not df_sales.empty else 0
-    total_due = df_sales["due_amount"].sum() if not df_sales.empty else 0
+    
+    initial_due = df_sales["due_amount"].sum() if not df_sales.empty else 0
+    total_collected = df_due_col["collected_amount"].sum() if not df_due_col.empty else 0
+    current_net_due = initial_due - total_collected
     
     col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
     col2.metric("মোট প্যাকেজিং খরচ", f"৳ {total_pack_cost:,.2f}")
     col3.metric("মোট বিক্রয় বিল", f"৳ {total_sales:,.2f}")
-    col4.metric("মার্কেটে মোট বাকি (Due)", f"৳ {total_due:,.2f}")
+    col4.metric("মার্কেটে বর্তমান আসল বাকি (Due)", f"৳ {current_net_due:,.2f}")
     
     st.markdown("---")
     
@@ -169,10 +185,11 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
         df_prod.to_excel(writer, sheet_name='Production', index=False)
         df_used.to_excel(writer, sheet_name='Used Materials', index=False)
         df_sales.to_excel(writer, sheet_name='Sales', index=False)
+        df_due_col.to_excel(writer, sheet_name='Due Collections', index=False)
     processed_data = output.getvalue()
     
     st.download_button(
-        label="📊 সম্পূর্ণ ইনভেন্টরি রিপোর্ট ডাউনলোড করুন (Excel)",
+        label="📊 সম্পূর্ণ ইনভেন্টরি ও কালেকশন রিপোর্ট ডাউনলোড করুন (Excel)",
         data=processed_data,
         file_name=f"MG_Agro_Pharma_Report_{date.today()}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -234,44 +251,64 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     else:
         st.info("এখনো কোনো বোতল/প্যাকেট ক্রয় এন্ট্রি নেই।")
 
-    # সেলসম্যান ও কাস্টমারভিত্তিক হিসাব
+    # সেলসম্যান ও কাস্টমারভিত্তিক পূর্ণাঙ্গ খতিয়ান
     st.markdown("---")
-    st.subheader("👥 সেলসম্যান ও কাস্টমারভিত্তিক বিক্রয় ও বাকির হিসাব")
+    st.subheader("👥 সেলসম্যান ও কাস্টমারভিত্তিক বিক্রয়, আদায় ও বাকি খতিয়ান")
     
     if not df_sales.empty:
-        sm_summary = df_sales.groupby("salesman_id").agg({
+        # সেলসম্যান সামারি হিসাব
+        sm_sales = df_sales.groupby("salesman_id").agg({
             "total_bill": "sum",
             "cash_received": "sum",
             "due_amount": "sum"
         }).reset_index()
+        
+        if not df_due_col.empty:
+            sm_rec = df_due_col.groupby("salesman_id")["collected_amount"].sum().reset_index()
+            sm_summary = pd.merge(sm_sales, sm_rec, on="salesman_id", how="left").fillna(0)
+        else:
+            sm_summary = sm_sales
+            sm_summary["collected_amount"] = 0
+            
+        sm_summary["মোট নগদ আদায় (৳)"] = sm_summary["cash_received"] + sm_summary["collected_amount"]
+        sm_summary["বর্তমান আসল বাকি (৳)"] = sm_summary["due_amount"] - sm_summary["collected_amount"]
         
         sm_summary.rename(columns={
             "salesman_id": "সেলসম্যান আইডি",
             "total_bill": "মোট বিক্রি (৳)",
-            "cash_received": "নগদ আদায় (৳)",
-            "due_amount": "মোট বাকি (৳)"
+            "cash_received": "বিক্রিতে নগদ (৳)",
+            "collected_amount": "পরে আদায়কৃত বাকি (৳)"
         }, inplace=True)
         
-        st.write("📌 **সকল সেলসম্যানের সারসংক্ষেপ (Summary):**")
-        st.dataframe(sm_summary, use_container_width=True)
+        st.write("📌 **সকল সেলসম্যানের হালনাগাদ সারসংক্ষেপ:**")
+        st.dataframe(sm_summary[["সেলসম্যান আইডি", "মোট বিক্রি (৳)", "বিক্রিতে নগদ (৳)", "পরে আদায়কৃত বাকি (৳)", "মোট নগদ আদায় (৳)", "বর্তমান আসল বাকি (৳)"]], use_container_width=True)
         
-        st.write("🔍 **নির্দিষ্ট সেলসম্যান অনুযায়ী কাস্টমার খতিয়ান:**")
+        # নির্দিষ্ট সেলসম্যান অনুযায়ী কাস্টমারদের বকেয়া
+        st.write("🔍 **নির্দিষ্ট সেলসম্যানের কাস্টমারভিত্তিক বাকি তালিকা:**")
         selected_sm = st.selectbox("কোন সেলসম্যানের কাস্টমার লিস্ট দেখতে চান?", sm_summary["সেলসম্যান আইডি"].unique())
         
-        cust_df = df_sales[df_sales["salesman_id"] == selected_sm].groupby(["customer_name"]).agg({
+        cust_sales = df_sales[df_sales["salesman_id"] == selected_sm].groupby("customer_name").agg({
             "total_bill": "sum",
             "cash_received": "sum",
             "due_amount": "sum"
         }).reset_index()
         
+        if not df_due_col.empty:
+            cust_rec = df_due_col[df_due_col["salesman_id"] == selected_sm].groupby("customer_name")["collected_amount"].sum().reset_index()
+            cust_df = pd.merge(cust_sales, cust_rec, on="customer_name", how="left").fillna(0)
+        else:
+            cust_df = cust_sales
+            cust_df["collected_amount"] = 0
+            
+        cust_df["পরিশোধিত মোট টাকা (৳)"] = cust_df["cash_received"] + cust_df["collected_amount"]
+        cust_df["বর্তমান বকেয়া টাকা (৳)"] = cust_df["due_amount"] - cust_df["collected_amount"]
+        
         cust_df.rename(columns={
             "customer_name": "কাস্টমার / ডিলারের নাম",
-            "total_bill": "মোট ক্রয় বিল (৳)",
-            "cash_received": "পরিশোধিত টাকা (৳)",
-            "due_amount": "বাকি টাকা (৳)"
+            "total_bill": "মোট ক্রয় বিল (৳)"
         }, inplace=True)
         
-        st.dataframe(cust_df, use_container_width=True)
+        st.dataframe(cust_df[["কাস্টমার / ডিলারের নাম", "মোট ক্রয় বিল (৳)", "পরিশোধিত মোট টাকা (৳)", "বর্তমান বকেয়া টাকা (৳)"]], use_container_width=True)
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
@@ -330,7 +367,7 @@ elif menu == "🧴 বোতল/প্যাকেট ক্রয়":
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি (মাল্টি-কাঁচামাল সাপোর্ট) -----------------
+# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি -----------------
 elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
@@ -364,90 +401,4 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
                 mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
             with c2:
                 q = st.number_input(f"পরিমাণ (Kg/Ltr) #{i+1}", min_value=0.0, step=0.01, key=f"qty_{i}")
-            used_materials_data.append((mat, q))
-        
-        submitted = st.form_submit_button("উৎপাদন সম্পন্ন করুন")
-        if submitted:
-            cursor.execute("""
-            INSERT INTO production (date, product_name, size, bottles_produced)
-            VALUES (?, ?, ?, ?)
-            """, (str(entry_date), product_name, size, bottles_produced))
-            prod_id = cursor.lastrowid
-            
-            for mat_name, mat_qty in used_materials_data:
-                if mat_qty > 0:
-                    cursor.execute("""
-                    INSERT INTO production_materials (production_id, raw_material_used, raw_quantity_used)
-                    VALUES (?, ?, ?)
-                    """, (prod_id, mat_name, mat_qty))
-            
-            conn.commit()
-            st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
-
-# ----------------- ৫. বিক্রয় ও ডেলিভারি এন্ট্রি -----------------
-elif menu == "🚚 বিক্রয় ও চালান এন্ট্রি":
-    st.header("🚚 বিক্রয় ও সেলসম্যান হিসাব")
-    
-    salesmen = [f"SM{str(i).zfill(2)}" for i in range(1, 11)]
-    product_list = [
-        "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
-        "MG -Enzyme", "MG -AD3E", "MG -ZINC VET", "MG -Multi plus", "MG -COF NIL", 
-        "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
-    ]
-    
-    with st.form("sales_form", clear_on_submit=True):
-        entry_date = st.date_input("বিক্রয়ের তারিখ", date.today())
-        salesman = st.selectbox("সেলসম্যান আইডি", salesmen)
-        customer = st.text_input("কাস্টমার / ডিলারের নাম")
-        prod = st.selectbox("পণ্য নির্বাচন করুন", product_list)
-        size = st.selectbox("প্যাক সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
-        qty = st.number_input("বিক্রিত সংখ্যা (পিস)", min_value=1, step=1)
-        tp_value = st.number_input("রেট / মূল্য (TP Value)", min_value=0.0, step=1.0)
-        cash_received = st.number_input("নগদ আদায় (Cash Received)", min_value=0.0, step=1.0)
-        
-        submitted = st.form_submit_button("বিক্রয় সাবমিট করুন")
-        if submitted and customer:
-            total_bill = qty * tp_value
-            due = total_bill - cash_received
-            cursor.execute("""
-            INSERT INTO sales (date, salesman_id, customer_name, product_name, size, quantity, total_bill, cash_received, due_amount)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (str(entry_date), salesman, customer, prod, size, qty, total_bill, cash_received, due))
-            conn.commit()
-            st.success(f"বিক্রয় সফল! মোট বিল: ৳ {total_bill:,.2f} | নগদ: ৳ {cash_received:,.2f} | বাকি: ৳ {due:,.2f}")
-
-# ----------------- ৬. রেকর্ড সংশোধন ও ডিলিট -----------------
-elif menu == "🗑️ রেকর্ড সংশোধন ও ডিলিট":
-    st.header("🗑️ রেকর্ড সংশোধন ও মুছে ফেলা")
-    
-    target_table = st.selectbox("কোন সেকশনের ডাটা দেখতে বা ডিলিট করতে চান?", [
-        "কাঁচামাল ক্রয় (raw_materials)",
-        "বোতল/প্যাকেট ক্রয় (packaging)",
-        "ওষুধ উৎপাদন (production)",
-        "ব্যবহৃত কাঁচামাল (production_materials)",
-        "বিক্রয় রেকর্ড (sales)"
-    ])
-    
-    table_map = {
-        "কাঁচামাল ক্রয় (raw_materials)": "raw_materials",
-        "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
-        "ওষুধ উৎপাদন (production)": "production",
-        "ব্যবহৃত কাঁচামাল (production_materials)": "production_materials",
-        "বিক্রয় রেকর্ড (sales)": "sales"
-    }
-    
-    selected_db_table = table_map[target_table]
-    df_current = pd.read_sql(f"SELECT * FROM {selected_db_table}", conn)
-    
-    if not df_current.empty:
-        st.write("বর্তমান এন্ট্রিগুলোর তালিকা (আইডি নম্বরসহ):")
-        st.dataframe(df_current, use_container_width=True)
-        
-        del_id = st.number_input("যে এন্ট্রিটি মুছে ফেলতে চান তার ID নম্বর লিখুন:", min_value=1, step=1)
-        if st.button("🚨 রেকর্ডটি স্থায়ীভাবে মুছে ফেলুন"):
-            cursor.execute(f"DELETE FROM {selected_db_table} WHERE id = ?", (del_id,))
-            conn.commit()
-            st.warning(f"আইডি {del_id} সফলভাবে মুছে ফেলা হয়েছে! ড্যাশবোর্ডে গিয়ে রিফ্রেশ করুন।")
-            st.rerun()
-    else:
-        st.info("এই সেকশনে বর্তমানে কোনো ডাটা নেই।")
+            used_materials_data
