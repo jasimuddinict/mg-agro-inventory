@@ -7,7 +7,7 @@ import io
 # পেজ কনফিগারেশন
 st.set_page_config(page_title="MG Agro Pharma Inventory", layout="wide", initial_sidebar_state="expanded")
 
-# সুন্দর বাংলা ফন্ট ও ডিজাইন
+# ফন্ট ও সিএসএস
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
@@ -82,9 +82,17 @@ CREATE TABLE IF NOT EXISTS production (
     date TEXT,
     product_name TEXT,
     size TEXT,
-    bottles_produced INTEGER,
+    bottles_produced INTEGER
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS production_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    production_id INTEGER,
     raw_material_used TEXT,
-    raw_quantity_used REAL
+    raw_quantity_used REAL,
+    FOREIGN KEY(production_id) REFERENCES production(id)
 )
 """)
 
@@ -135,6 +143,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     df_raw = pd.read_sql("SELECT * FROM raw_materials", conn)
     df_pack = pd.read_sql("SELECT * FROM packaging", conn)
     df_prod = pd.read_sql("SELECT * FROM production", conn)
+    df_used = pd.read_sql("SELECT * FROM production_materials", conn)
     df_sales = pd.read_sql("SELECT * FROM sales", conn)
     
     col1, col2, col3, col4 = st.columns(4)
@@ -158,6 +167,7 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
         df_raw.to_excel(writer, sheet_name='Raw Materials', index=False)
         df_pack.to_excel(writer, sheet_name='Packaging', index=False)
         df_prod.to_excel(writer, sheet_name='Production', index=False)
+        df_used.to_excel(writer, sheet_name='Used Materials', index=False)
         df_sales.to_excel(writer, sheet_name='Sales', index=False)
     processed_data = output.getvalue()
     
@@ -188,12 +198,12 @@ if menu == "📊 লাইভ ড্যাশবোর্ড":
     else:
         st.info("এখনো কোনো উৎপাদন রেকর্ড নেই।")
 
-    # কাঁচামালের স্টক
+    # কাঁচামালের বর্তমান স্টক (একাধিক কাঁচামাল বিয়োগের পর)
     st.subheader("🧪 কাঁচামালের বর্তমান মজুদ (Raw Material Stock)")
     if not df_raw.empty:
         raw_in = df_raw.groupby(["item_name", "unit"])["quantity"].sum().reset_index()
-        if not df_prod.empty:
-            raw_out = df_prod.groupby("raw_material_used")["raw_quantity_used"].sum().reset_index()
+        if not df_used.empty:
+            raw_out = df_used.groupby("raw_material_used")["raw_quantity_used"].sum().reset_index()
             raw_stock = pd.merge(raw_in, raw_out, left_on="item_name", right_on="raw_material_used", how="left").fillna(0)
             raw_stock["অবশিষ্ট স্টক"] = raw_stock["quantity"] - raw_stock["raw_quantity_used"]
         else:
@@ -279,10 +289,10 @@ elif menu == "🧴 বোতল/প্যাকেট ক্রয়":
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি -----------------
+# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি (একাধিক কাঁচামাল সাপোর্ট) -----------------
 elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
-    st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে স্বয়ংক্রিয়ভাবে কাঁচামাল ও বোতল স্টক থেকে কমে যাবে।")
+    st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
     
     product_list = [
         "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
@@ -292,31 +302,61 @@ elif menu == "⚙️ ওষুধ উৎপাদন এন্ট্রি":
     
     raw_materials_available = pd.read_sql("SELECT name FROM item_list ORDER BY name ASC", conn)["name"].tolist()
     
-    with st.form("prod_form", clear_on_submit=True):
+    # ফর্মের বাইরে কাঁচামালের সংখ্যা নির্ধারণের অপশন
+    num_materials = st.number_input("এই ব্যাচে মোট কয়টি কাঁচামাল ব্যবহার হয়েছে?", min_value=1, max_value=20, value=2, step=1)
+    
+    with st.form("prod_multi_form", clear_on_submit=True):
         entry_date = st.date_input("উৎপাদনের তারিখ", date.today())
-        product_name = st.selectbox("ওষুধের নাম", product_list)
-        size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
-        bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            product_name = st.selectbox("ওষুধের নাম", product_list)
+        with col_p2:
+            size = st.selectbox("বোতলের সাইজ", ["10ml", "15ml", "20ml", "50ml", "100ml", "125ml", "200ml", "250ml", "500ml", "1000ml", "100gm", "1kg"])
+        with col_p3:
+            bottles_produced = st.number_input("কত বোতল/প্যাকেট তৈরি হলো?", min_value=1, step=1)
         
-        st.markdown("##### ব্যবহৃত কাঁচামাল:")
-        raw_used = st.selectbox("কোন কাঁচামাল ব্যবহার হয়েছে?", raw_materials_available)
-        raw_qty = st.number_input("ব্যবহৃত কাঁচামালের পরিমাণ (Kg/Ltr)", min_value=0.0, step=0.1)
+        st.markdown("##### 🧪 ব্যবহৃত কাঁচামাল ও পরিমাণের তালিকা:")
+        
+        # ডায়নামিক রো তৈরি
+        used_materials_data = []
+        for i in range(num_materials):
+            c1, c2 = st.columns(2)
+            with c1:
+                mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
+            with c2:
+                q = st.number_input(f"পরিমাণ (Kg/Ltr) #{i+1}", min_value=0.0, step=0.01, key=f"qty_{i}")
+            used_materials_data.append((mat, q))
         
         submitted = st.form_submit_button("উৎপাদন সম্পন্ন করুন")
         if submitted:
+            # প্রোডাকশন টেবিল ইনসার্ট
             cursor.execute("""
-            INSERT INTO production (date, product_name, size, bottles_produced, raw_material_used, raw_quantity_used)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (str(entry_date), product_name, size, bottles_produced, raw_used, raw_qty))
+            INSERT INTO production (date, product_name, size, bottles_produced)
+            VALUES (?, ?, ?, ?)
+            """, (str(entry_date), product_name, size, bottles_produced))
+            prod_id = cursor.lastrowid
+            
+            # প্রতিটি ব্যবহৃত কাঁচামাল ডাটাবেসে সেভ
+            for mat_name, mat_qty in used_materials_data:
+                if mat_qty > 0:
+                    cursor.execute("""
+                    INSERT INTO production_materials (production_id, raw_material_used, raw_quantity_used)
+                    VALUES (?, ?, ?)
+                    """, (prod_id, mat_name, mat_qty))
+            
             conn.commit()
-            st.success(f"{product_name} ({size}) - {bottles_produced} বোতল উৎপাদিত হয়েছে এবং ইনভেন্টরিতে যোগ হয়েছে!")
+            st.success(f"{product_name} ({size}) - {bottles_produced} বোতল সফলভাবে উৎপাদিত হয়েছে এবং সমস্ত কাঁচামাল স্টক থেকে মাইনাস হয়েছে!")
 
 # ----------------- ৫. বিক্রয় ও ডেলিভারি এন্ট্রি -----------------
 elif menu == "🚚 বিক্রয় ও চালান এন্ট্রি":
     st.header("🚚 বিক্রয় ও সেলসম্যান হিসাব")
     
     salesmen = [f"SM{str(i).zfill(2)}" for i in range(1, 11)]
-    product_list = ["MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", "MG -Enzyme", "MG -ZINC VET"]
+    product_list = [
+        "MG -Cal", "MG -liver sol", "MG -Sol -E", "MG -PH", "MG -FERO VET", 
+        "MG -Enzyme", "MG -AD3E", "MG -ZINC VET", "MG -Multi plus", "MG -COF NIL", 
+        "MG-DB", "MG-VIT-C", "MG-RUMEN", "MG-Milk & Milk"
+    ]
     
     with st.form("sales_form", clear_on_submit=True):
         entry_date = st.date_input("বিক্রয়ের তারিখ", date.today())
@@ -347,6 +387,7 @@ elif menu == "🗑️ রেকর্ড সংশোধন ও ডিলিট"
         "কাঁচামাল ক্রয় (raw_materials)",
         "বোতল/প্যাকেট ক্রয় (packaging)",
         "ওষুধ উৎপাদন (production)",
+        "ব্যবহৃত কাঁচামাল (production_materials)",
         "বিক্রয় রেকর্ড (sales)"
     ])
     
@@ -354,6 +395,7 @@ elif menu == "🗑️ রেকর্ড সংশোধন ও ডিলিট"
         "কাঁচামাল ক্রয় (raw_materials)": "raw_materials",
         "বোতল/প্যাকেট ক্রয় (packaging)": "packaging",
         "ওষুধ উৎপাদন (production)": "production",
+        "ব্যবহৃত কাঁচামাল (production_materials)": "production_materials",
         "বিক্রয় রেকর্ড (sales)": "sales"
     }
     
