@@ -10,8 +10,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# চমৎকার বাংলা ফন্ট ও স্টাইল (আইকন নষ্ট না করে)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+    
+    html, body, h1, h2, h3, h4, p, label, input, button, select, textarea, .stMarkdown, .stMetric {
+        font-family: 'Hind Siliguri', sans-serif !important;
+    }
+    
+    /* আইকন ফন্ট অক্ষুণ্ন রাখার নিয়ম */
+    [data-testid="stIconMaterial"], .material-symbols-rounded, .material-icons {
+        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
+    }
+
     .stMetric {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -35,7 +47,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# লগইন ভেরিফিকেশন সিস্টেম
+# ----------------- লগইন ভেরিফিকেশন সিস্টেম -----------------
 USERS = {
     "admin": "mg1234",
     "manager": "agro2026"
@@ -69,7 +81,7 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-# মূল সফটওয়্যার
+# ----------------- মূল সফটওয়্যার (লগইন সফল হওয়ার পর) -----------------
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -99,24 +111,22 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-menu_options = {
-    "dashboard": "📊 লাইভ ড্যাশবোর্ড",
-    "raw_purchase": "🧪 কাঁচামাল ক্রয় এন্ট্রি",
-    "packaging_purchase": "🧴 বোতল/প্যাকেট ক্রয়",
-    "production": "⚙️ ওষুধ উৎপাদন এন্ট্রি",
-    "sales": "🚚 বিক্রয় ও চালান এন্ট্রি",
-    "due_collection": "💵 বাকি টাকা আদায় (Due Receive)",
-    "records": "🗑️ রেকর্ড সংশোধন ও ডিলিট"
-}
+# মেন্যু তালিকা (ইনডেক্স ভিত্তিক নির্ভরযোগ্য রাউটিং)
+menu_list = [
+    "📊 লাইভ ড্যাশবোর্ড", 
+    "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
+    "🧴 বোতল/প্যাকেট ক্রয়", 
+    "⚙️ ওষুধ উৎপাদন এন্ট্রি", 
+    "🚚 বিক্রয় ও চালান এন্ট্রি",
+    "💵 বাকি টাকা আদায় (Due Receive)",
+    "🗑️ রেকর্ড সংশোধন ও ডিলিট"
+]
 
-selected_key = st.sidebar.radio(
-    "মেন্যু নির্বাচন করুন:",
-    options=list(menu_options.keys()),
-    format_func=lambda x: menu_options[x]
-)
+selected_menu = st.sidebar.radio("মেন্যু নির্বাচন করুন:", menu_list)
+menu_index = menu_list.index(selected_menu)
 
-# ----------------- ১. লাইভ ড্যাশবোর্ড -----------------
-if selected_key == "dashboard":
+# ----------------- ০. লাইভ ড্যাশবোর্ড -----------------
+if menu_index == 0:
     st.header("📈 রিয়েল-টাইম স্টক ও ব্যালেন্স রিপোর্ট")
     
     df_raw = pd.read_sql("SELECT * FROM raw_materials", conn)
@@ -128,26 +138,12 @@ if selected_key == "dashboard":
     
     col1, col2, col3, col4 = st.columns(4)
     
-    total_raw_cost = 0.0
-    if not df_raw.empty:
-        total_raw_cost = float(df_raw["total_cost"].sum())
-        
-    total_pack_cost = 0.0
-    if not df_pack.empty:
-        total_pack_cost = float(df_pack["total_cost"].sum())
-        
-    total_sales = 0.0
-    if not df_sales.empty:
-        total_sales = float(df_sales["total_bill"].sum())
-        
-    initial_due = 0.0
-    if not df_sales.empty:
-        initial_due = float(df_sales["due_amount"].sum())
-        
-    total_collected = 0.0
-    if not df_due_col.empty:
-        total_collected = float(df_due_col["collected_amount"].sum())
-        
+    total_raw_cost = float(df_raw["total_cost"].sum()) if not df_raw.empty else 0.0
+    total_pack_cost = float(df_pack["total_cost"].sum()) if not df_pack.empty else 0.0
+    total_sales = float(df_sales["total_bill"].sum()) if not df_sales.empty else 0.0
+    
+    initial_due = float(df_sales["due_amount"].sum()) if not df_sales.empty else 0.0
+    total_collected = float(df_due_col["collected_amount"].sum()) if not df_due_col.empty else 0.0
     net_remaining_due = initial_due - total_collected
     
     col1.metric("মোট কাঁচামাল ক্রয়", f"৳ {total_raw_cost:,.2f}")
@@ -288,8 +284,8 @@ if selected_key == "dashboard":
     else:
         st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
 
-# ----------------- ২. কাঁচামাল ক্রয় এন্ট্রি -----------------
-elif selected_key == "raw_purchase":
+# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
+elif menu_index == 1:
     st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
     
     if st.checkbox("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে টিক দিন"):
@@ -326,8 +322,8 @@ elif selected_key == "raw_purchase":
             conn.commit()
             st.success(f"সফলভাবে {qty} {unit} {item_name} স্টকে যুক্ত হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৩. বোতল/প্যাকেট ক্রয় -----------------
-elif selected_key == "packaging_purchase":
+# ----------------- ২. বোতল/প্যাকেট ক্রয় -----------------
+elif menu_index == 2:
     st.header("🧴 খালি বোতল / প্যাকেট ক্রয় ইনপুট")
     with st.form("pack_form", clear_on_submit=True):
         entry_date = st.date_input("ক্রয়ের তারিখ", date.today())
@@ -343,8 +339,8 @@ elif selected_key == "packaging_purchase":
             conn.commit()
             st.success(f"সফলভাবে {qty} পিস {bottle_size} বোতল স্টকে যোগ হয়েছে! মোট খরচ: ৳ {total:,.2f}")
 
-# ----------------- ৪. ওষুধ উৎপাদন এন্ট্রি -----------------
-elif selected_key == "production":
+# ----------------- ৩. ওষুধ উৎপাদন এন্ট্রি -----------------
+elif menu_index == 3:
     st.header("⚙️ ওষুধ উৎপাদন (Production) ইনপুট")
     st.caption("ওষুধ উৎপাদনের এন্ট্রি দিলে ব্যবহৃত সমস্ত কাঁচামাল এবং বোতল স্টক থেকে স্বয়ংক্রিয়ভাবে মাইনাস হয়ে যাবে।")
     
@@ -374,4 +370,7 @@ elif selected_key == "production":
         for i in range(num_materials):
             c1, c2 = st.columns(2)
             with c1:
-               mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
+                mat = st.selectbox(f"কাঁচামাল #{i+1}", raw_materials_available, key=f"mat_{i}")
+            with c2:
+                q = st.number_input(f"পরিমাণ (Kg/Ltr) #{i+1}", min_value=0.0, step=0.01, key=f"qty_{i}")
+            used_materials_data.append
