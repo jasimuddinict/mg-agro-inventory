@@ -80,7 +80,7 @@ if not st.session_state["logged_in"]:
     login_form()
     st.stop()
 
-# ----------------- মূল সফটওয়্যার (লগইন সফল হওয়ার পর) -----------------
+# ----------------- মূল সফটওয়্যার -----------------
 st.sidebar.write(f"👤 লগইন আছেন: **{st.session_state['username']}**")
 if st.sidebar.button("🚪 লগআউট (Logout)"):
     st.session_state["logged_in"] = False
@@ -110,7 +110,7 @@ st.title("🏭 এমজি এগ্রো ফার্মা (MG Agro Pharma)"
 st.caption("স্মার্ট ইনভেন্টরি, প্রোডাকশন ও সেলস ট্র্যাকিং সফটওয়্যার")
 st.markdown("---")
 
-# মেন্যু তালিকা (ইনডেক্স ভিত্তিক রাউটিং)
+# মেন্যু তালিকা (ইনডেক্স ভিত্তিক নির্ভরযোগ্য রাউটিং)
 menu_list = [
     "📊 লাইভ ড্যাশবোর্ড", 
     "🧪 কাঁচামাল ক্রয় এন্ট্রি", 
@@ -187,7 +187,8 @@ if menu_index == 0:
             stock_df["quantity"] = 0
             
         stock_df.rename(columns={"product_name": "ওষুধের নাম", "size": "সাইজ", "bottles_produced": "মোট উৎপাদন", "quantity": "মোট বিক্রয়"}, inplace=True)
-        st.dataframe(stock_df[["ওষুধের নাম", "সাইজ", "মোট উৎপাদন", "মোট বিক্রয়", "বর্তমান স্টক (বোতল)"]], use_container_width=True)
+        cols_prod = ["ওষুধের নাম", "সাইজ", "মোট উৎপাদন", "মোট বিক্রয়", "বর্তমান স্টক (বোতল)"]
+        st.dataframe(stock_df[cols_prod], use_container_width=True)
     else:
         st.info("এখনো কোনো উৎপাদন রেকর্ড নেই।")
 
@@ -204,4 +205,96 @@ if menu_index == 0:
             raw_stock["অবশিষ্ট স্টক"] = raw_stock["quantity"]
             
         raw_stock.rename(columns={"item_name": "কাঁচামালের নাম", "unit": "একক", "quantity": "মোট ক্রয়", "raw_quantity_used": "মোট ব্যবহার"}, inplace=True)
-        st.dataframe(raw_stock[["কাঁচামালের নাম", "একক", "মোট ক্রয়", "মোট ব্যবহার", "অবশিষ্ট স্টক"]],
+        cols_raw = ["কাঁচামালের নাম", "একক", "মোট ক্রয়", "মোট ব্যবহার", "অবশিষ্ট স্টক"]
+        st.dataframe(raw_stock[cols_raw], use_container_width=True)
+    else:
+        st.info("এখনো কোনো কাঁচামাল ক্রয় এন্ট্রি নেই।")
+
+    st.subheader("🧴 খালি বোতল ও প্যাকেটের বর্তমান মজুদ (Packaging Stock)")
+    if not df_pack.empty:
+        pack_in = df_pack.groupby("bottle_size")["quantity"].sum().reset_index()
+        if not df_prod.empty:
+            pack_out = df_prod.groupby("size")["bottles_produced"].sum().reset_index()
+            pack_stock = pd.merge(pack_in, pack_out, left_on="bottle_size", right_on="size", how="left").fillna(0)
+            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"] - pack_stock["bottles_produced"]
+        else:
+            pack_stock = pack_in
+            pack_stock["bottles_produced"] = 0
+            pack_stock["অবশিষ্ট স্টক (পিস)"] = pack_stock["quantity"]
+            
+        pack_stock.rename(columns={"bottle_size": "বোতল/প্যাকেট সাইজ", "quantity": "মোট ক্রয় (পিস)", "bottles_produced": "উৎপাদনে ব্যবহৃত (পিস)"}, inplace=True)
+        cols_pack = ["বোতল/প্যাকেট সাইজ", "মোট ক্রয় (পিস)", "উৎপাদনে ব্যবহৃত (পিস)", "অবশিষ্ট স্টক (পিস)"]
+        st.dataframe(pack_stock[cols_pack], use_container_width=True)
+    else:
+        st.info("এখনো কোনো বোতল/প্যাকেট ক্রয় এন্ট্রি নেই।")
+
+    st.markdown("---")
+    st.subheader("👥 সেলসম্যান ও কাস্টমারভিত্তিক বিক্রয়, আদায় ও বাকি খতিয়ান")
+    
+    if not df_sales.empty:
+        sm_sales = df_sales.groupby("salesman_id").agg({
+            "total_bill": "sum",
+            "cash_received": "sum",
+            "due_amount": "sum"
+        }).reset_index()
+        
+        if not df_due_col.empty:
+            sm_rec = df_due_col.groupby("salesman_id")["collected_amount"].sum().reset_index()
+            sm_summary = pd.merge(sm_sales, sm_rec, on="salesman_id", how="left").fillna(0)
+        else:
+            sm_summary = sm_sales
+            sm_summary["collected_amount"] = 0
+            
+        sm_summary["মোট নগদ আদায় (৳)"] = sm_summary["cash_received"] + sm_summary["collected_amount"]
+        sm_summary["বর্তমান আসল বাকি (৳)"] = sm_summary["due_amount"] - sm_summary["collected_amount"]
+        
+        sm_summary.rename(columns={
+            "salesman_id": "সেলসম্যান আইডি",
+            "total_bill": "মোট বিক্রি (৳)",
+            "cash_received": "বিক্রিতে নগদ (৳)",
+            "collected_amount": "পরে আদায়কৃত বাকি (৳)"
+        }, inplace=True)
+        
+        st.write("📌 **সকল সেলসম্যানের সারসংক্ষেপ:**")
+        cols_sm = ["সেলসম্যান আইডি", "মোট বিক্রি (৳)", "বিক্রিতে নগদ (৳)", "পরে আদায়কৃত বাকি (৳)", "মোট নগদ আদায় (৳)", "বর্তমান আসল বাকি (৳)"]
+        st.dataframe(sm_summary[cols_sm], use_container_width=True)
+        
+        st.write("🔍 **নির্দিষ্ট সেলসম্যানের কাস্টমারভিত্তিক বাকি তালিকা:**")
+        selected_sm = st.selectbox("কোন সেলসম্যানের কাস্টমার লিস্ট দেখতে চান?", sm_summary["সেলসম্যান আইডি"].unique())
+        
+        cust_sales = df_sales[df_sales["salesman_id"] == selected_sm].groupby("customer_name").agg({
+            "total_bill": "sum",
+            "cash_received": "sum",
+            "due_amount": "sum"
+        }).reset_index()
+        
+        if not df_due_col.empty:
+            cust_rec = df_due_col[df_due_col["salesman_id"] == selected_sm].groupby("customer_name")["collected_amount"].sum().reset_index()
+            cust_df = pd.merge(cust_sales, cust_rec, on="customer_name", how="left").fillna(0)
+        else:
+            cust_df = cust_sales
+            cust_df["collected_amount"] = 0
+            
+        cust_df["পরিশোধিত মোট টাকা (৳)"] = cust_df["cash_received"] + cust_df["collected_amount"]
+        cust_df["বর্তমান বকেয়া টাকা (৳)"] = cust_df["due_amount"] - cust_df["collected_amount"]
+        
+        cust_df.rename(columns={
+            "customer_name": "কাস্টমার / ডিলারের নাম",
+            "total_bill": "মোট ক্রয় বিল (৳)"
+        }, inplace=True)
+        
+        cols_cust = ["কাস্টমার / ডিলারের নাম", "মোট ক্রয় বিল (৳)", "পরিশোধিত মোট টাকা (৳)", "বর্তমান বকেয়া টাকা (৳)"]
+        st.dataframe(cust_df[cols_cust], use_container_width=True)
+    else:
+        st.info("এখনো কোনো বিক্রয় রেকর্ড এন্ট্রি করা হয়নি।")
+
+# ----------------- ১. কাঁচামাল ক্রয় এন্ট্রি -----------------
+elif menu_index == 1:
+    st.header("🧪 কাঁচামাল ক্রয় ইনপুট")
+    
+    if st.checkbox("➕ তালিকায় সম্পূর্ণ নতুন কোনো কাঁচামাল যুক্ত করতে টিক দিন"):
+        new_item_to_add = st.text_input("নতুন কাঁচামালের নাম লিখুন:")
+        if st.button("তালিকায় যুক্ত করুন"):
+            if new_item_to_add.strip() != "":
+                try:
+                    cursor.execute("INSERT INTO item_list (name) VALUES (?)", (new_item_to_add.strip(),))
